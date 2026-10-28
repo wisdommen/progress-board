@@ -1,0 +1,5 @@
+{
+  "name": "progress-board",
+  "owner": { "name": "wisdommen" },
+  "plugins": [{ "name": "progress-board", "source": "./", "description": "Per-session and overall progress band with a /progress panel" }]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "progress-board",
+  "version": "0.6.0",
+  "description": "Session and overall-plan progress: a two-line band above the prompt and a /progress panel",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "stepReminder": { "type": "number", "title": "Step reminder calls", "description": "Initial reminder threshold: 3, 5 or 8 counted calls.", "default": 3 },
+    "awayMinutes": { "type": "number", "title": "Away threshold minutes", "description": "Initial away-summary threshold: 15, 30 or 60 minutes.", "default": 30 },
+    "autoDone": { "type": "boolean", "title": "Automatically complete merged work", "description": "Initial global default; plan overrides take precedence.", "default": false },
+    "retention": { "type": "number", "title": "Ended-session display hours", "description": "Show ended sessions for 6, 24 or 72 hours; disk history remains seven days.", "default": 24 },
+    "contextWarning": { "type": "number", "title": "Context warning percentage", "description": "Warn at 70, 80 or 90 percent context usage.", "default": 80 },
+    "notifications": { "type": "string", "title": "Waiting notifications", "description": "Notify the most recently used session about new waiting items after ten seconds of quiet; sound requires host playback support.", "default": "off", "options": ["off", "toast", "sound"] },
+    "monitor": {
+      "type": "boolean",
+      "title": "Suggestion-only progress monitor",
+      "description": "Suggest changes only when evidence changed. Disabling retains unresolved suggestions.",
+      "default": true
+    },
+    "monitorMinutes": {
+      "type": "number",
+      "title": "Monitor interval in minutes",
+      "description": "Initial monitor cadence; at least five minutes. The Settings tab can override it.",
+      "default": 15,
+      "min": 5
+    },
+    "barGlyph": {
+      "type": "string",
+      "title": "Progress bar glyph",
+      "description": "One cell of the progress bars. Use █ or ▅ if ■ draws two cells wide in your terminal.",
+      "default": "■",
+      "options": ["■", "█", "▅"]
+    },
+    "enforceGoal": {
+      "type": "boolean",
+      "title": "Require a goal for multi-step work",
+      "description": "Once per session, pause the fourth tool call if the model has not recorded a goal.",
+      "default": true
+    }
+  }
+}
