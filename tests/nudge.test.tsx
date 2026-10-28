@@ -7,8 +7,9 @@ import type { On } from 'claude-code'
 import type { SessionRec, SessionView, Snapshot } from '../types'
 import { buildBanner, rowText } from '../hooks/banner'
 import { waitingItems } from '../hooks/model'
-import { ENFORCE_DENY, autoGoalLabel, autoGoalOf } from '../hooks/nudge'
-import { world } from './world'
+import { ENFORCE_DENY, autoGoalLabel, autoGoalOf, callSummary, takeStepNudge } from '../hooks/nudge'
+import { world, seedPlan } from './world'
+import { PLAN as PLAN_ID, plan as fixturePlan } from './v03-fixtures'
 
 const NOW = 1_800_000_000_000
 const SESSION_FILE = '/h/.claude/progress-board/sessions/s1.json'
@@ -210,15 +211,99 @@ const report = ($: { tool: { call: (e: never) => Promise<unknown> } }, input: Re
 const STEPS = { goal: '加 --sort', steps: [{ title: '读代码', status: 'doing' }, { title: '实现', status: 'todo' }, { title: '测试', status: 'todo' }] }
 const nudged = (r: Ran) => (r.context ?? []).some(c => c.includes('progress-board') && c.includes('step_updates'))
 
-test('step nudge: after 3 calls with no report while steps are open, the result carries a reminder naming the doing step', async ($, on) => {
+test('step nudge: after 3 calls with no report while steps are open, the reminder lists every open step by number', async ($, on) => {
   engine(on)
   await report($, STEPS)
   const runs: Ran[] = []
   for (let i = 0; i < 3; i++) runs.push(await bash($))
   expect(runs.slice(0, 2).some(nudged)).toBe(false)
   expect(nudged(runs[2] as Ran)).toBe(true)
-  expect((runs[2]?.context ?? []).join('')).toContain('读代码')
+  const text = (runs[2]?.context ?? []).join('')
+  expect(text).toContain('3 operations since this session last updated its steps')
+  expect(text).toContain('1 读代码 (doing)')
+  expect(text).toContain('2 实现 (todo)')
+  expect(text).toContain('3 测试 (todo)')
+  expect(text).toContain('call progress_session step_updates')
+  // The old escape hatch let the model dismiss the reminder without reporting.
+  expect(text).not.toContain('ignore if nothing changed')
   expect(runs[2]?.result).toEqual({ out: 'Bash' })
+})
+
+test('step nudge: the reminder names each call since the last report, and starts over after one', async ($, on) => {
+  engine(on)
+  await report($, STEPS)
+  await $.tool.call({ tool: 'Write', file_path: '/w/acme/src/tasks.js', content: '' } as never)
+  await $.tool.call({ tool: 'Write', file_path: 'test/tasks.test.js', content: '' } as never)
+  const r = await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'run tests' } as never) as Ran
+  const text = (r.context ?? []).join('\n')
+  expect(text).toContain('3 operations since this session last updated its steps: Write src/tasks.js, Write test/tasks.test.js, Bash npm.')
+  await report($, { step_updates: [{ index: 1, status: 'done' }, { index: 2, status: 'doing' }] })
+  await $.tool.call({ tool: 'Read', file_path: 'README.md' } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'docs/a.md' } as never)
+  const r2 = await $.tool.call({ tool: 'Read', file_path: 'docs/b.md' } as never) as Ran
+  const t2 = (r2.context ?? []).join('\n')
+  expect(t2).toContain('Read README.md, Read docs/a.md, Read docs/b.md')
+  expect(t2).not.toContain('Write')
+  expect(t2).toContain('2 实现 (doing)')
+  expect(t2).not.toContain('1 读代码')
+})
+
+test('step nudge: summaries keep the tool and its target; at most five calls and eight steps are listed', () => {
+  expect(callSummary('Write', { file_path: '/w/acme/src/tasks.js' })).toBe('Write src/tasks.js')
+  expect(callSummary('Edit', { file_path: 'lib/util/io.ts' })).toBe('Edit util/io.ts')
+  expect(callSummary('Read', { file_path: 'README.md' })).toBe('Read README.md')
+  expect(callSummary('Bash', { command: 'npm   test\n--watch=false' })).toBe('Bash npm')
+  // Never any part of the command text: the record outlives the turn (review IN-04).
+  expect(callSummary('Bash', { command: 'export OPENAI_API_KEY=sk-proj-secret' })).toBe('Bash export')
+  expect(callSummary('Bash', { command: 'x'.repeat(80) })).toBe('Bash')
+  // A leading assignment is not a program name and never enters the record.
+  expect(callSummary('Bash', { command: 'TOKEN=abc123 npm test' })).toBe('Bash')
+  expect(callSummary('Agent', { description: 'Review the diff' })).toBe('Agent Review the diff')
+  expect(callSummary('TodoWrite', { todos: [] })).toBe('TodoWrite')
+  const steps = Array.from({ length: 10 }, (_, i) => ({ title: `step${i + 1}`, status: 'todo' }))
+  const s = { steps, stepsSource: 'tool', sinceReport: 3, stepNudges: 0, recentCalls: ['a', 'b', 'c', 'd', 'e', 'f'] }
+  const text = takeStepNudge(s) ?? ''
+  expect(text).toContain('since this session last updated its steps: b, c, d, e, f.')
+  expect(text).toContain('8 step8 (todo)')
+  expect(text).not.toContain('9 step9')
+  expect(text).toContain(', …')
+  expect(s.recentCalls).toEqual([])
+})
+
+test('step nudge: the record keeps the program name, never the command text', async ($, on) => {
+  const w = engine(on)
+  await $.tool.call({ tool: 'Bash', command: 'export OPENAI_API_KEY=sk-proj-secret' } as never)
+  const saved = w.files.get(SESSION_FILE)?.text ?? ''
+  expect(saved).not.toContain('sk-proj-secret')
+  expect(JSON.parse(saved).recentCalls).toEqual(['Bash export'])
+})
+
+test('step nudge: a progress_session report resets the calls the reminder lists', async ($, on) => {
+  engine(on)
+  await report($, STEPS)
+  await $.tool.call({ tool: 'Write', file_path: 'src/a.js', content: '' } as never)
+  await $.tool.call({ tool: 'Write', file_path: 'src/b.js', content: '' } as never)
+  await report($, { step_updates: [{ index: 1, status: 'doing' }] })
+  await $.tool.call({ tool: 'Read', file_path: 'x.md' } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'y.md' } as never)
+  const r = await $.tool.call({ tool: 'Read', file_path: 'z.md' } as never) as Ran
+  const text = (r.context ?? []).join('\n')
+  expect(text).toContain('Read x.md, Read y.md, Read z.md')
+  expect(text).not.toContain('Write')
+})
+
+test('step nudge: a progress_plan call resets the calls the reminder lists', async ($, on) => {
+  const w = engine(on); seedPlan(w, '/h', fixturePlan())
+  await report($, STEPS)
+  await $.tool.call({ tool: 'Write', file_path: 'src/a.js', content: '' } as never)
+  await $.tool.call({ tool: 'Write', file_path: 'src/b.js', content: '' } as never)
+  await $.tool.call({ tool: 'mcp__progress-board__progress_plan', action: 'set_item', plan: PLAN_ID, item: 'p1-1', status: 'wrapping' } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'x.md' } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'y.md' } as never)
+  const r = await $.tool.call({ tool: 'Read', file_path: 'z.md' } as never) as Ran
+  const text = (r.context ?? []).join('\n')
+  expect(text).toContain('Read x.md, Read y.md, Read z.md')
+  expect(text).not.toContain('Write')
 })
 
 test('step nudge: the interval doubles while ignored, and a report resets it', async ($, on) => {

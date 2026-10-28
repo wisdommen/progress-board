@@ -66,19 +66,55 @@ export function autoGoalLabel(text: string): string {
 /** Main-loop calls without a progress_session report before the first step reminder; it doubles each time it goes unheeded. */
 export const STEP_NUDGE_AT = 3
 
-type StepState = { steps: { title: string; status: string }[]; stepsSource?: string; sinceReport?: number; stepNudges?: number }
+/** Steps listed in one reminder, and the cells one step title may take there. */
+export const STEP_NUDGE_STEPS = 8
+export const STEP_NUDGE_TITLE = 40
+/** Calls kept as summaries for the reminder. */
+export const RECENT_CALLS = 5
+
+/** A short summary of one main-loop call: the tool and what it acted on (a path, a command, a description). */
+export function callSummary(tool: string, input: Record<string, unknown>): string {
+  const str = (v: unknown) => typeof v === 'string' && v.trim() ? v.trim() : undefined
+  if (tool === 'Write' || tool === 'Edit' || tool === 'Read' || tool === 'NotebookEdit') {
+    const path = str(input['file_path']) ?? str(input['notebook_path'])
+    if (path) {
+      // Basename plus its parent directory: enough to tell two edits apart in one reminder.
+      const parts = path.split('/').filter(Boolean)
+      const base = parts.pop() ?? path
+      const dir = parts.pop()
+      return `${tool} ${dir ? `${dir}/${base}` : base}`
+    }
+  }
+  if (tool === 'Bash') {
+    // The program alone: arguments and leading KEY=value assignments may carry secrets, and this
+    // record outlives the turn. Anything that is not a short program name is left out entirely.
+    const program = str(input['command'])?.split(/\s+/)[0]
+    if (program && program.length <= 40 && !program.includes('=')) return `Bash ${program}`
+  }
+  if (tool === 'Agent') {
+    const description = str(input['description'])
+    if (description) return `Agent ${clip(description, 40)}`
+  }
+  return tool
+}
+
+type StepState = { steps: { title: string; status: string }[]; stepsSource?: string; sinceReport?: number; stepNudges?: number; recentCalls?: string[] }
 
 /** The reminder to attach to this call's result, or undefined. Counts the reminder as given. */
 export function takeStepNudge(s: StepState, threshold = STEP_NUDGE_AT): string | undefined {
   if (s.stepsSource !== 'tool') return undefined
-  const open = s.steps.filter(x => x.status !== 'done')
+  const open = s.steps.map((x, i) => ({ title: x.title, status: x.status, n: i + 1 })).filter(x => x.status !== 'done')
   if (open.length === 0) return undefined
   const n = s.stepNudges ?? 0
   const since = s.sinceReport ?? 0
   if (since < threshold * 2 ** n) return undefined
   s.stepNudges = n + 1
   s.sinceReport = 0
-  const doing = open.filter(x => x.status === 'doing').map(x => `“${x.title}”`)
-  const where = doing.length ? `Currently marked doing: ${new Intl.ListFormat('en', { type: 'conjunction' }).format(doing)}` : `Next step is “${open[0]?.title ?? ''}”`
-  return `progress-board: ${since} operations without updating this session's progress (${where}). If a step finished or the current step changed, call progress_session step_updates (done for finished; doing for current); ignore if nothing changed.`
+  const calls = (s.recentCalls ?? []).slice(-RECENT_CALLS)
+  s.recentCalls = []
+  // Concrete enough to dismiss: what was done since the last report, and every open step by number.
+  const what = calls.length ? ` since this session last updated its steps: ${calls.join(', ')}.` : ' since this session last updated its steps.'
+  const shown = open.slice(0, STEP_NUDGE_STEPS).map(x => `${x.n} ${clip(x.title, STEP_NUDGE_TITLE)} (${x.status})`)
+  const more = open.length > STEP_NUDGE_STEPS ? ', …' : ''
+  return `progress-board: ${since} operations${what} Steps: ${shown.join(', ')}${more}. Before your next action, call progress_session step_updates to mark every finished step done and the current one doing.`
 }

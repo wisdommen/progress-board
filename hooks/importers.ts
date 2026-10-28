@@ -306,6 +306,61 @@ function candidate(kind: ImportKind, cwd: string, path?: string, repo?: string):
   const absolute = path ? resolvePath(cwd, path) : undefined
   return { kind, cwd, key: `${kind}:${repo ?? absolute ?? cwd}`, ...(absolute ? { path: absolute } : {}), ...(repo ? { repo } : {}) }
 }
+
+/** Headings that name no work: a plan titled "Plan" tells the person nothing about it. */
+const GENERIC_TITLES = /^(plan|todo|to[ -]?do|tasks|roadmap|backlog|checklist|notes|readme)$/i
+
+/** One plan-ID segment: lower-case letters, digits and single dashes. */
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '')
+}
+
+/** The last path segment without its extension. */
+const stemOf = (path: string | undefined) => baseName(path ?? '').replace(/\.(?:md|json)$/i, '')
+const specsName = (kind: ImportKind) => kind === 'kiro' ? 'kiro' : 'specs'
+
+/**
+ * The ID a new import takes: the project prefix plus what the source is — the Markdown file's stem,
+ * `roadmap`, the spec folder, a Taskmaster tag, `github`, `plan` — never a hash nobody can read.
+ */
+export function importSlug(source: SourceCandidate, parsed: ParsedImport): string {
+  if (source.kind === 'github') return 'github'
+  if (source.kind === 'plan-mode') return 'plan'
+  if (source.kind === 'gsd') return 'roadmap'
+  if (source.kind === 'taskmaster') {
+    // `master` is Taskmaster's own default tag, not a choice the person made; a real tag names the import.
+    const tag = parsed.phases.length === 1 ? /#tag:([^#/]+)$/.exec(parsed.phases[0]?.source.key ?? '')?.[1] : undefined
+    return tag && tag.toLowerCase() !== 'master' ? slugify(tag) || 'taskmaster' : 'taskmaster'
+  }
+  if (source.kind === 'specs' || source.kind === 'kiro') {
+    const folder = /\/(?:\.kiro\/)?specs\/([^/]+?)(?:\/tasks\.md)?$/.exec(source.path ?? '')?.[1]
+    if (folder) return slugify(folder) || specsName(source.kind)
+    // The specs root itself: one spec names the import unambiguously.
+    const names = [...new Set(parsed.phases.map(p => p.name))]
+    if (names.length === 1) return slugify(names[0]!) || specsName(source.kind)
+    return specsName(source.kind)
+  }
+  return slugify(stemOf(source.path)) || 'plan'
+}
+
+/** The title of a new import: a Markdown heading unless it names no work, else `<project> <Stem>`. */
+export function importTitle(source: SourceCandidate, parsed: ParsedImport, prefix: string): string {
+  if (source.kind !== 'markdown' && source.kind !== 'plan-mode') return parsed.title
+  const heading = parsed.title.trim()
+  if (heading && !GENERIC_TITLES.test(heading.replace(/[:\s]+$/, ''))) return heading
+  const stem = stemOf(source.path)
+  return stem ? `${prefix} ${stem}` : parsed.title
+}
+
+/** `id` when no other source holds it, else the first free `id-2`, `id-3`, … */
+async function freeId(io: Io, paths: Paths, id: string, key: string): Promise<string> {
+  for (let n = 1; n <= 50; n++) {
+    const candidate = n === 1 ? id : `${id}-${n}`
+    const existing = await readPlan(io, paths, candidate)
+    if (!existing || existing.source?.key === key) return candidate
+  }
+  return `${id}-${hash(key)}`
+}
 const validRepo = (repo: string) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) && !repo.split('/').some(p => p === '.' || p === '..')
 async function ghJson($: EngineInterface, cwd: string, argv: string[]): Promise<unknown> {
   const out = await $.process.run(['gh', ...argv], { cwd, timeoutMs: 20_000 })
@@ -467,8 +522,8 @@ async function selectSource($: EngineInterface, io: Io, ctx: ImportContext): Pro
   return candidate(kind, cwd, target)
 }
 
-function mergeImport(current: Plan | null, parsed: ParsedImport, source: SourceCandidate, id: string, sessionId: string, now: number): { plan: ImportedPlan; log: Omit<LogEntry, 'at' | 'plan'>[] } {
-  const plan = (current ? JSON.parse(JSON.stringify(current)) : newPlan({ id, title: parsed.title, goal: t('import.goal'), criteria: t('import.criteria'), repos: [source.cwd], phases: [], includeRelease: false, by: sessionId, now })) as ImportedPlan
+function mergeImport(current: Plan | null, parsed: ParsedImport, source: SourceCandidate, id: string, title: string, sessionId: string, now: number): { plan: ImportedPlan; log: Omit<LogEntry, 'at' | 'plan'>[] } {
+  const plan = (current ? JSON.parse(JSON.stringify(current)) : newPlan({ id, title, goal: t('import.goal'), criteria: t('import.criteria'), repos: [source.cwd], phases: [], includeRelease: false, by: sessionId, now })) as ImportedPlan
   const previous = plan.source, oldItems = new Map<string, ImportedItem>()
   for (const phase of plan.phases) for (const item of phase.items) if (item.source) oldItems.set(item.source.key, item)
   const present: string[] = [], log: Omit<LogEntry, 'at' | 'plan'>[] = []
@@ -538,7 +593,9 @@ export async function importSource($: EngineInterface, io: Io, paths: Paths, ctx
     }
     const source = await boundary.canonical(selection)
     const prefix = baseName(source.cwd).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'project'
-    let id = ctx.planId ?? `${prefix}/import-${hash(source.key)}`
+    // A plan this source is bound to already keeps its ID (0.6.0's hash IDs included); its snapshot is
+    // read before the fetch, so a change made while fetching is never overwritten.
+    let bound: string | undefined
     if (!ctx.planId) {
       const matches: string[] = []
       for (const entry of await listPlanIds(io, paths)) {
@@ -547,23 +604,32 @@ export async function importSource($: EngineInterface, io: Io, paths: Paths, ctx
       }
       // An explicit plan ID disambiguates intentionally duplicated source bindings.
       if (matches.length > 1) return { text: t('import.sourceMismatch') }
-      if (matches.length === 1) id = matches[0]!
+      bound = matches[0]
     }
-    const snapshot = await readPlan(io, paths, id) as ImportedPlan | null
-    if (snapshot && (!snapshot.source || snapshot.source.key !== source.key || !['draft', 'active'].includes(snapshot.status))) return { text: t('import.sourceMismatch') }
+    const isBound = (p: ImportedPlan | null) => !!p && !!p.source && p.source.key === source.key && ['draft', 'active'].includes(p.status)
+    // A brand-new import: no plan was bound to this source when it started.
+    const fresh = !ctx.planId && bound === undefined
+    let id = ctx.planId ?? bound
+    const snapshot = id === undefined ? null : await readPlan(io, paths, id) as ImportedPlan | null
+    if (snapshot && !isBound(snapshot)) return { text: t('import.sourceMismatch') }
     // Fetch and parse before taking a lock, even for local sources. A slow gh
     // request cannot block claims, human edits or other plan mutations.
     const parsed = await readSource($, boundary.io, source)
     if (!snapshot && !parsed.phases.some(p => p.items.length)) return { text: t('import.none') }
+    // The new ID is decided after the fetch, but the snapshot stays null: it is what was observed before.
+    if (id === undefined) id = await freeId(io, paths, `${prefix}/${importSlug(source, parsed)}`, source.key)
     return await withLock(io, paths.planDir(id), async guard => {
       const current = await readPlan(io, paths, id) as ImportedPlan | null
+      // A plan that appeared here while a brand-new import fetched belongs to another import: never
+      // merge this older parse into it. Running the import again picks up that plan's state.
+      if (fresh && current) return { text: t('import.retry') }
       if (current && (!current.source || current.source.key !== source.key || !['draft', 'active'].includes(current.status))) return { text: t('import.sourceMismatch') }
       if (JSON.stringify(current?.source) !== JSON.stringify(snapshot?.source)) {
         // Another importer won while we fetched: return its result, never apply
         // this older observation. Unrelated human fields still merge below.
         return current ? { text: t('import.updated', { plan: id }), plan: current } : { text: t('import.sourceMismatch') }
       }
-      const merged = mergeImport(current, parsed, source, id, ctx.sessionId, await io.now())
+      const merged = mergeImport(current, parsed, source, id, importTitle(source, parsed, prefix), ctx.sessionId, await io.now())
       await saveImport(io, paths, guard, merged.plan, merged.log)
       return { text: t(current ? 'import.updated' : 'import.draft', { plan: id }), plan: merged.plan }
     })
@@ -588,7 +654,7 @@ export async function reconcileImports($: EngineInterface, io: Io, paths: Paths,
     await withLock(io, paths.planDir(plan.id), async guard => {
       const current = await readPlan(io, paths, plan.id) as ImportedPlan | null, now = await io.now()
       if (!current?.source || !['draft', 'active'].includes(current.status) || JSON.stringify(current.source) !== JSON.stringify(snapshot.source) || now - current.source.lastImportedAt < IMPORT_INTERVAL_MS) return
-      const merged = mergeImport(current, parsed, selected, current.id, sessionId, now)
+      const merged = mergeImport(current, parsed, selected, current.id, current.title, sessionId, now)
       await saveImport(io, paths, guard, merged.plan, merged.log)
     })
   } catch { /* Retry at a later tick; no destructive guesses after an IO/gh failure. */ }

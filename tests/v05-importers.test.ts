@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { EngineInterface } from 'claude-code'
 import { MemIo } from './memio'
 import { Paths, readPlan, readLogTail } from '../hooks/store'
+import { t } from '../hooks/i18n'
 import { markdown, gsd, specs, taskmaster, milestones, issues, timeline, planMode } from './fixtures/v05/sources'
 
 import * as importers from '../hooks/importers'
@@ -225,9 +226,14 @@ test('importers repeating a source reuses an existing custom-id plan rather than
   expect(b.plan!.phases[0]!.items[0]!.status).toBe('done')
   expect((await f.io.list(paths.plans)).length).toBe(1)
 })
-test('importers concurrent first imports converge on one draft and item set', async () => {
+test('importers concurrent first imports never merge an older parse: one wins and the rest are told to retry', async () => {
   const m = await load(), f = setup(); await f.put('TODO.md', markdown)
   const out = await Promise.all(['a', 'b', 'c'].map(sessionId => m.importSource(f.engine, f.io, paths, { cwd, sessionId, path: 'TODO.md' })))
-  expect(new Set(out.map(r => r.plan!.id)).size).toBe(1)
-  expect(all((await readPlan(f.io, paths, out[0]!.plan!.id))!).length).toBe(4)
+  const won = out.filter(r => r.plan)
+  expect(won.length).toBeGreaterThanOrEqual(1)
+  expect(won.every(r => r.plan!.id === 'app/todo')).toBe(true)
+  // A parse taken before the winner existed is never merged into it: that caller is told to retry.
+  expect(out.filter(r => !r.plan).every(r => r.text === t('import.retry'))).toBe(true)
+  expect(all((await readPlan(f.io, paths, 'app/todo'))!).length).toBe(4)
+  expect((await f.io.list(paths.plans)).length).toBe(1)
 })

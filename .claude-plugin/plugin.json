@@ -1,19 +1,19 @@
 {
   "name": "progress-board",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Session and overall-plan progress: a two-line band above the prompt and a /progress panel",
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
     "stepReminder": {
       "type": "number",
-      "title": "Step reminder calls",
+      "title": "Step reminder calls (default 3)",
       "description": "Initial reminder threshold: 3, 5 or 8 counted calls.",
       "default": 3
     },
     "awayMinutes": {
       "type": "number",
-      "title": "Away threshold minutes",
+      "title": "Away threshold minutes (default 30)",
       "description": "Initial away-summary threshold: 15, 30 or 60 minutes.",
       "default": 30
     },
@@ -25,13 +25,13 @@
     },
     "retention": {
       "type": "number",
-      "title": "Ended-session display hours",
+      "title": "Ended-session display hours (default 24)",
       "description": "Show ended sessions for 6, 24 or 72 hours; disk history remains seven days.",
       "default": 24
     },
     "contextWarning": {
       "type": "number",
-      "title": "Context warning percentage",
+      "title": "Context warning percentage (default 80)",
       "description": "Warn at 70, 80 or 90 percent context usage.",
       "default": 80
     },
@@ -54,7 +54,7 @@
     },
     "monitorMinutes": {
       "type": "number",
-      "title": "Monitor interval in minutes",
+      "title": "Monitor interval in minutes (default 15)",
       "description": "Initial monitor cadence; at least five minutes. The Settings tab can override it.",
       "default": 15,
       "min": 5

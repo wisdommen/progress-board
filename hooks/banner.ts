@@ -92,8 +92,10 @@ export function focusPlanOf(snap: Snapshot): { plan: Plan | null; more: number }
   return { plan: recent ?? null, more }
 }
 
+/** Sessions working on a plan, including those that accepted or changed one of its items here. */
 export function sessionsOn(snap: Snapshot, planId: string): number {
-  return snap.sessions.filter(s => s.isAlive && s.endedAt === undefined && s.attribution.confident.some(c => c.plan === planId)).length
+  return snap.sessions.filter(s => s.isAlive && s.endedAt === undefined
+    && (s.attribution.confident.some(c => c.plan === planId) || (s.editedPlans ?? []).some(e => e.plan === planId))).length
 }
 
 export function buildBanner(inp: BannerInput): Banner {

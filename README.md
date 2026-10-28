@@ -46,7 +46,7 @@ claude plugin install progress-board --marketplace wisdommen/progress-board
 
 In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `wisdommen/progress-board`, then **Add plugin**.
 
-Restart running sessions after installing or updating.
+During installation Claude Code asks you to add the marketplace (press `y`), to choose where to install ("Install for you" is fine) and to review the plugin's options. The defaults work, so you can save them unchanged; you can change them later in the Settings tab. The plugin is active in that session right away; restart other running sessions to load it there.
 
 ## Quick start
 

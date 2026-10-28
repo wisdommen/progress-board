@@ -228,12 +228,16 @@ export type SessionRec = {
   usedToolAt?: number
   /** Counted main-loop calls since the last progress_session call. */
   sinceReport?: number
+  /** Short summaries of those calls (tool and its target, at most five); records written before 0.6.1 have none. */
+  recentCalls?: string[]
   /** Step reminders given since the last progress_session call (the interval doubles with each). */
   stepNudges?: number
   steps: Step[]
   stepsSource?: 'tool' | 'todo'
   /** Claims on plans this session works on. */
   claims: Claim[]
+  /** Plans the person accepted here or the model changed an item of here: counted as a participating session, never an attribution or a claim. */
+  editedPlans?: { plan: string; at: number }[]
   /** Decisions the model took on the person's behalf, each with whether it can be undone. */
   decided?: Decision[]
   /** Non-blocking decisions the model wants from the person (the 等你拍板 queue). */

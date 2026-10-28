@@ -1,5 +1,14 @@
 {
   "name": "progress-board",
-  "owner": { "name": "wisdommen" },
-  "plugins": [{ "name": "progress-board", "source": "./", "description": "Per-session and overall progress band with a /progress panel" }]
+  "owner": {
+    "name": "wisdommen"
+  },
+  "description": "Session and overall-plan progress: a two-line band above the prompt and a /progress panel",
+  "plugins": [
+    {
+      "name": "progress-board",
+      "source": "./",
+      "description": "Session and overall-plan progress: a two-line band above the prompt and a /progress panel"
+    }
+  ]
 }

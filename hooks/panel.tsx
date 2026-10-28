@@ -263,7 +263,8 @@ function renderProgress(els: Els, snap: Snapshot, ui: PanelUi, cols: number, gly
     if (plan.voided) notes.push(tr('panel.m061', { p0: plan.voided }))
     if (plan.added) notes.push(tr('panel.m062', { p0: plan.added }))
     if (notes.length) out.push(<Text dimColor wrap="truncate-end">  {notes.join('   ')}</Text>)
-  } else {
+  } else if (!snap.waiting.some(w => w.kind === 'draft')) {
+    // A pending draft already has its card above: "no plan yet" next to it would contradict it.
     out.push(<Text> </Text>)
     out.push(<Text color="subtle">{tr('panel.m063')}</Text>)
   }
@@ -351,7 +352,8 @@ function phaseRows(els: Els, ph: Phase, isCurrent: boolean, isPhaseOpen: boolean
   const rows: RenderElement[] = [header]
   const key = `ph-${ph.id}`
   const isOpen = ui.expanded.includes(key)
-  const recentDone = items.filter(i => i.status === 'done').sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0)).slice(0, 2)
+  // Only a dated completion is recent: imported history has no time and would claim a slot.
+  const recentDone = items.filter(i => i.status === 'done' && i.doneAt !== undefined).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0)).slice(0, 2)
   const shown = items.length <= 8 || isOpen
     ? items
     : items.filter(i => i.status === 'wrapping' || claimers.has(i.id) || recentDone.includes(i))
@@ -371,7 +373,9 @@ function phaseRows(els: Els, ph: Phase, isCurrent: boolean, isPhaseOpen: boolean
   const itemRow = (i: Item) => {
     const who = claimers.get(i.id), level = priorityOf(ph, i)
     const title = <Text color={level === 'pinned' || level === 'high' ? 'claude' : level === 'low' || level === 'deferred' ? 'subtle' : undefined}>{priorityMark(level)}{i.title}</Text>
-    if (i.status === 'done') return <Text color="success" wrap="truncate-end">│   ✓ {title}  <Text dimColor>{hhmm(i.doneAt ?? i.updatedAt)}</Text></Text>
+    // Only a known completion time is shown: an item imported as already done has none, and its last
+    // update (the import) would read as if it had just finished.
+    if (i.status === 'done') return <Text color="success" wrap="truncate-end">│   ✓ {title}{i.doneAt !== undefined ? <Text dimColor>  {hhmm(i.doneAt)}</Text> : null}</Text>
     if (i.status === 'wrapping') return <Text color="warning" wrap="truncate-end">│   ▒ {title}  {marks(i)}{tr('panel.m080')}{i.exception ? tr('panel.m081', { p0: clip(i.exception, 16) }) : ''}</Text>
     if (who?.length) return <Text wrap="truncate-end"><Text color="claude">│   ◐ {title}</Text>  {marks(i)}<Text dimColor>  ← {displayList(who.map(x => claimLabel(x, sessions, now)))}</Text></Text>
     return <Text color="subtle" wrap="truncate-end">│   · {title}  {marks(i)}</Text>

@@ -29,7 +29,7 @@ import {
   RETAIN_MS, answeredQuestions, applyUndo, awayReportOf, dispatchItemOf, isAskAnswered, liveClaims, liveItemClaims, publishKey, questionApprovals, recordAnswers, rejectDraft, renderPlanMd, sessionFate, sessionName, waitingItems,
 } from './model'
 import { renderPanel } from './panel'
-import { ENFORCE_DENY, autoGoalOf, firstMessageOf, isOwnPrompt, shouldEnforce, takeStepNudge } from './nudge'
+import { ENFORCE_DENY, RECENT_CALLS, autoGoalOf, callSummary, firstMessageOf, isOwnPrompt, shouldEnforce, takeStepNudge } from './nudge'
 import {
   LogTail, Paths, SessionSaver, ioFor, isIndexableRepo, listPlanIds, mutatePlan, parseJson, readPlan, readRepo, repoKeyOf, saveSession, touchRepo,
 } from './store'
@@ -731,6 +731,11 @@ function targetDraft(planArg?: string): Plan | undefined {
   return plans.find(p => p.status === 'draft' && (repo.has(p.id) || p.createdBy === self?.id)) ?? plans.find(p => p.status === 'draft')
 }
 
+/** The plan this session works on: the person accepted it here, or the model changed one of its items here. */
+function notePlanEdit(s: SessionRec, plan: string, at: number): void {
+  s.editedPlans = [...(s.editedPlans ?? []).filter(e => e.plan !== plan), { plan, at }].slice(-20)
+}
+
 async function accept($: EngineInterface, id: string, kind: Approval['kind']): Promise<string> {
   if (!io || !paths) return tr('register.m007')
   const by = self?.id ?? 'person'
@@ -740,6 +745,7 @@ async function accept($: EngineInterface, id: string, kind: Approval['kind']): P
     return { plan, log: [{ by, action: 'confirm', detail: tr('register.m009'), approval: plan.approval as Approval }], md: renderPlanMd(plan) }
   }).catch((e: unknown) => ({ error: String(e) }))
   later($)
+  if (!('error' in r) && self) { notePlanEdit(self, id, await $.clock.now()); await saveSelf($, true) }
   return 'error' in r ? r.error : tr('register.m010', { p0: id })
 }
 
@@ -998,6 +1004,7 @@ export const register: Register = (on, options) => {
     const r = await runSessionTool(input, ctx)
     s.usedToolAt ??= await now($)
     s.sinceReport = 0
+    s.recentCalls = []
     s.stepNudges = 0
     await saveSelf($, true)
     await exportEnv($)
@@ -1018,6 +1025,7 @@ export const register: Register = (on, options) => {
     const { tool: _t, tool_use_id: _id, agentId: _a, requestMeta: _m, ...input } = e as Record<string, unknown>
     s.usedToolAt ??= await now($)
     s.sinceReport = 0
+    s.recentCalls = []
     s.lastPlanCall = s.calls ?? 0
     const ctx = await toolCtx($, s, await now($))
     let r: { text: string; isError?: boolean }
@@ -1027,6 +1035,8 @@ export const register: Register = (on, options) => {
       r = { text: result.text }
     } else r = await runPlanTool(input, ctx)
     if (typeof input.plan === 'string') planCache.delete(input.plan)
+    // A main-loop status change is this session working on the plan: confident attribution, never a claim.
+    if (e.agentId === undefined && input.action === 'set_item' && typeof input.status === 'string' && !r.isError && typeof input.plan === 'string') notePlanEdit(s, input.plan, await now($))
     // Spent approval evidence is part of the record.
     await saveSelf($, true)
     await exportEnv($)
@@ -1053,6 +1063,8 @@ export const register: Register = (on, options) => {
     if (!s) return next(e)
     s.calls = (s.calls ?? 0) + 1
     s.sinceReport = (s.sinceReport ?? 0) + 1
+    // A reminder names what was done since the last report, so the model cannot dismiss it as vague.
+    s.recentCalls = [...(s.recentCalls ?? []), callSummary(String(e.tool), e as unknown as Record<string, unknown>)].slice(-RECENT_CALLS)
     const t = await now($)
     // Spec §13: with no formal goal, the 4th call of the session is stopped before it runs, once per session.
     // Only when the tools exist: a stop the model cannot satisfy would block the user's work.

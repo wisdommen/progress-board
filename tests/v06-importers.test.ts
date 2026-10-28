@@ -1,7 +1,7 @@
 import { expect, enTest as test } from './locale-test'
 import type { EngineInterface } from 'claude-code'
 import { importSource, parseMarkdown, parseTaskmaster, parseGitHub, reconcileImports, detectSources } from '../hooks/importers'
-import { setLocale } from '../hooks/i18n'
+import { setLocale, t } from '../hooks/i18n'
 import { MemIo } from './memio'
 import { Paths, readPlan, withLock } from '../hooks/store'
 import { reportMarkdown } from '../hooks/report'
@@ -177,4 +177,87 @@ test('V06 WR06 discovery never reads symlinks outside the project root', async (
   try { await detectSources(f.engine, f.io, cwd) } catch { /* refusing discovery is fail closed */ }
   expect(f.reads.includes(`${cwd}/TODO.md`)).toBe(false)
   expect(f.reads.includes('/outside/secret.md')).toBe(false)
+})
+
+// ---- 0.6.1: a fresh user cannot read `<project>/import-<hash>` or a heading like "# Plan" ----
+
+test('V061 a new import takes its id from the source and a readable title from a generic heading', async () => {
+  const f = fixture(); await f.put('TODO.md', '# Plan\n- [ ] A\n')
+  const first = (await importSource(f.engine, f.io, paths, { cwd, sessionId: 's', path: 'TODO.md' })).plan!
+  expect(first.id).toBe('app/todo')
+  expect(first.title).toBe('app TODO')
+  const named = fixture(); await named.put('tasks.md', '# Sprint 7 tasks\n- [ ] A\n')
+  const kept = (await importSource(named.engine, named.io, paths, { cwd, sessionId: 's', path: 'tasks.md' })).plan!
+  expect(kept.id).toBe('app/tasks')
+  expect(kept.title).toBe('Sprint 7 tasks')
+})
+test('V061 two sources with the same slug get numbered ids, never one plan for both', async () => {
+  const f = fixture(); await f.put('TODO.md', '- [ ] A\n'); await f.put('docs/todo.md', '- [ ] B\n')
+  const a = (await importSource(f.engine, f.io, paths, { cwd, sessionId: 's', path: 'TODO.md' })).plan!
+  const b = (await importSource(f.engine, f.io, paths, { cwd, sessionId: 's', path: 'docs/todo.md' })).plan!
+  expect([a.id, b.id]).toEqual(['app/todo', 'app/todo-2'])
+})
+test('V061 a plan imported by 0.6.0 keeps its hash id through its source binding', async () => {
+  const f = fixture(); await f.put('TODO.md', '- [ ] A\n')
+  const legacy = {
+    v: 1, id: 'app/import-107pifo', title: 'Plan', goal: 'g', criteria: 'c', repos: [cwd], status: 'active',
+    createdAt: 1, updatedAt: 1, createdBy: 's', phases: [], reviews: [], seq: 0, added: 0, voided: 0, reverts: [],
+    source: { kind: 'markdown', key: `markdown:${cwd}/TODO.md`, path: `${cwd}/TODO.md`, cwd, lastImportedAt: 1, present: [] },
+  }
+  await f.io.writeAtomic(paths.planJson(legacy.id), JSON.stringify(legacy))
+  const again = (await importSource(f.engine, f.io, paths, { cwd, sessionId: 's', path: 'TODO.md' })).plan!
+  expect(again.id).toBe('app/import-107pifo')
+  expect(again.title).toBe('Plan')
+})
+test('V061 every other source kind names its import after what it came from', async () => {
+  const g = fixture()
+  await g.put('.planning/ROADMAP.md', '# Roadmap\n## Phase 1: Work\n- [ ] A\n')
+  const gsd = (await importSource(g.engine, g.io, paths, { cwd, sessionId: 's', source: 'gsd' })).plan!
+  expect(gsd.id).toBe('app/roadmap'); expect(gsd.title).toBe('Roadmap')
+  const s = fixture(); await s.put('specs/001-login/tasks.md', '## Tasks\n- [ ] A\n')
+  const specs = (await importSource(s.engine, s.io, paths, { cwd, sessionId: 's', path: 'specs' })).plan!
+  expect(specs.id).toBe('app/001-login')
+  const k = fixture(); await k.put('.kiro/specs/billing/tasks.md', '## Tasks\n- [ ] A\n')
+  expect((await importSource(k.engine, k.io, paths, { cwd, sessionId: 's', source: 'kiro' })).plan!.id).toBe('app/billing')
+  const t = fixture(); await t.put('.taskmaster/tasks/tasks.json', JSON.stringify({ tasks: [{ id: 1, title: 'A' }] }))
+  expect((await importSource(t.engine, t.io, paths, { cwd, sessionId: 's', source: 'taskmaster' })).plan!.id).toBe('app/taskmaster')
+  const tagged = fixture(); await tagged.put('.taskmaster/tasks/tasks.json', JSON.stringify({ tag: 'backend', tasks: [{ id: 1, title: 'A' }] }))
+  expect((await importSource(tagged.engine, tagged.io, paths, { cwd, sessionId: 's', source: 'taskmaster' })).plan!.id).toBe('app/backend')
+  const gh = fixture()
+  expect((await importSource(gh.engine, gh.io, paths, { cwd, sessionId: 's', source: 'github:acme/app' })).plan!.id).toBe('app/github')
+  const p = fixture(); await p.put('notes/launch.md', '# Launch\n- [ ] A\n')
+  const pm = (await importSource(p.engine, p.io, paths, { cwd, sessionId: 's', source: 'plan-mode', path: 'notes/launch.md' })).plan!
+  expect(pm.id).toBe('app/plan'); expect(pm.title).toBe('Launch')
+})
+
+// ---- 0.6.1 review: the new-import race, and Taskmaster's default tag ----
+
+test('V061 WR01 a new import never merges its older parse into a plan created while it fetched', async () => {
+  const f = fixture(); await f.put('TODO.md', '- [ ] A\n')
+  let raced = false
+  const read = f.io.read.bind(f.io)
+  f.io.read = async path => {
+    // Another import creates the plan during this import's fetch, after the bound lookup saw nothing.
+    if (!raced && path === `${cwd}/TODO.md`) {
+      raced = true
+      const concurrent = {
+        v: 1, id: 'app/todo', title: 'Concurrent import', goal: 'g', criteria: 'c', repos: [cwd], status: 'active',
+        createdAt: 1, updatedAt: 1, createdBy: 'other', phases: [], reviews: [], seq: 0, added: 0, voided: 0, reverts: [],
+        source: { kind: 'markdown', key: `markdown:${cwd}/TODO.md`, path: `${cwd}/TODO.md`, cwd, lastImportedAt: 5, present: [] },
+      }
+      await f.io.writeAtomic(paths.planJson('app/todo'), JSON.stringify(concurrent))
+    }
+    return read(path)
+  }
+  const out = await importSource(f.engine, f.io, paths, { cwd, sessionId: 's', path: 'TODO.md' })
+  expect(out.text).toBe(t('import.retry'))
+  expect(out.plan).toBeUndefined()
+  expect((await readPlan(f.io, paths, 'app/todo'))!.source!.lastImportedAt).toBe(5)
+})
+
+test('V061 WR02 a default Taskmaster tag file is named taskmaster; an explicit tag keeps its name', async () => {
+  const d = fixture(); await d.put('.taskmaster/tasks/tasks.json', JSON.stringify({ master: { tasks: [{ id: 1, title: 'A' }] } }))
+  expect((await importSource(d.engine, d.io, paths, { cwd, sessionId: 's', source: 'taskmaster' })).plan!.id).toBe('app/taskmaster')
+  const tagged = fixture(); await tagged.put('.taskmaster/tasks/tasks.json', JSON.stringify({ tag: 'backend', tasks: [{ id: 1, title: 'A' }] }))
+  expect((await importSource(tagged.engine, tagged.io, paths, { cwd, sessionId: 's', source: 'taskmaster' })).plan!.id).toBe('app/backend')
 })
