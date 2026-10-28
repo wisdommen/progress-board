@@ -8,12 +8,7 @@ It reads ordinary Claude Code events, your project files, git and (optionally) t
 
 **A two-line band above the prompt.** The first line is this session: its goal, finished steps, current step and background work. The second line is the overall plan: done and planned items, active sessions and a **Waiting for you** count. Only that count asks you to act.
 
-```text
-● This session  Add login rate limit  ■■■■■■······  2/5   Working on Write tests
-  Overall       ■■■■■■■■■■■■········  12/30  3 sessions · Waiting for you 2
-```
-
-*(Example only; colors and layout adapt to your terminal width.)*
+<img src="docs/images/band.png" alt="The two-line band above the prompt" width="760">
 
 **A `/progress` panel with five tabs:**
 
@@ -24,6 +19,8 @@ It reads ordinary Claude Code events, your project files, git and (optionally) t
 | Sessions | Each session's model, cost, context use, current step and last reply; compact, interrupt, check progress or send a message |
 | Activity | Seven days of completions, events and decisions |
 | Settings | Every option with its choices and a short explanation, plus which features use tokens |
+
+<img src="docs/images/panel-progress.png" alt="The Progress tab of the /progress panel" width="760">
 
 **Also:**
 
