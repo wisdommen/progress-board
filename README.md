@@ -79,3 +79,7 @@ Full documentation is in the [wiki](https://github.com/wisdommen/progress-board/
 
 - Claude Code with mod support (tested on 2.1.311).
 - `git` for commit and branch checks; the GitHub CLI `gh` for pull request checks and GitHub imports (optional).
+
+## License
+
+[MIT](LICENSE)
