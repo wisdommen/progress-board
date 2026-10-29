@@ -236,8 +236,11 @@ export type SessionRec = {
   stepsSource?: 'tool' | 'todo'
   /** Claims on plans this session works on. */
   claims: Claim[]
-  /** Plans the person accepted here or the model changed an item of here: counted as a participating session, never an attribution or a claim. */
-  editedPlans?: { plan: string; at: number }[]
+  /**
+   * Plans the person accepted here or the model changed an item of here: counted as a participating session,
+   * never an attribution or a claim. Only entries with at count; itemAt is suggestion recency alone.
+   */
+  editedPlans?: { plan: string; at?: number; itemAt?: number }[]
   /** Decisions the model took on the person's behalf, each with whether it can be undone. */
   decided?: Decision[]
   /** Non-blocking decisions the model wants from the person (the 等你拍板 queue). */
@@ -299,7 +302,7 @@ export type AwayReport = {
 
 export type SuggestionFields = { item: string; status?: 'todo' | 'wrapping' | 'done'; milestone?: number; split?: string[]; reason: string; evidence: string }
 export type MonitorCost = { usd: number; input: number; output: number; cacheRead: number; cacheWrite: number; basis: string }
-export type Suggestion = SuggestionFields & { id: string; created: number; by: 'monitor'; state: 'open' | 'accepted' | 'rejected'; cost: MonitorCost; deliveredAt?: number; deliveredTo?: string; resolvedAt?: number; resolvedBy?: string; resolutionReason?: string }
+export type Suggestion = SuggestionFields & { id: string; created: number; by: 'monitor'; state: 'open' | 'accepted' | 'rejected'; cost: MonitorCost; deliveries?: number; deliveredAt?: number; deliveredTo?: string; resolvedAt?: number; resolvedBy?: string; resolutionReason?: string }
 export type MonitorRecord = { owner: string; heartbeat: number; lastRun?: number; digestHash?: string; runToken?: string; commits?: Record<string, string[]>; dailyCost?: Record<string, number> }
 export type MonitorView = { enabled: boolean; lastRun?: number; open: number; todayCost: number }
 

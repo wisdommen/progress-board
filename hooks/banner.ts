@@ -95,7 +95,7 @@ export function focusPlanOf(snap: Snapshot): { plan: Plan | null; more: number }
 /** Sessions working on a plan, including those that accepted or changed one of its items here. */
 export function sessionsOn(snap: Snapshot, planId: string): number {
   return snap.sessions.filter(s => s.isAlive && s.endedAt === undefined
-    && (s.attribution.confident.some(c => c.plan === planId) || (s.editedPlans ?? []).some(e => e.plan === planId))).length
+    && (s.attribution.confident.some(c => c.plan === planId) || (s.editedPlans ?? []).some(e => e.plan === planId && e.at !== undefined))).length
 }
 
 export function buildBanner(inp: BannerInput): Banner {
@@ -145,6 +145,9 @@ export function buildBanner(inp: BannerInput): Banner {
     row2Empty = waiting === 0
     row2 = [{ prio: 0, segs: [{ t: '◆ ', color: 'subtle' }] }, { prio: 6, segs: [{ t: tr('banner.m011'), color: 'subtle' }] }, ...waitG(' · ')]
   }
+
+  const open = plan?.status === 'active' ? snap.monitors?.[plan.id]?.open ?? 0 : 0
+  if (open > 0) row2.push({ prio: 2, segs: [{ t: ` · ${tr('banner.toCheck', { count: open })}`, color: 'warning', bold: true }] })
 
   // ---- row 1 ----
   const lead1: Group = { prio: 0, segs: [{ t: `${inp.isWorking ? inp.spinner : '●'} `, color: 'claude' }] }

@@ -1,4 +1,5 @@
 {
+  "banner.toCheck": "待核對 {count}",
   "banner.m001": "{p0}等你 {p1}",
   "banner.m002": "整體  ",
   "banner.m003": "  完成",

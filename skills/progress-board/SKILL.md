@@ -46,7 +46,7 @@ This is the rule most often broken. Each item must be something that gets finish
 The monitor compares the board with commits, PRs and session activity. When it finds a mismatch, it attaches suggestions with ids to one of your tool results.
 
 - Handle every suggestion you receive in that turn. Verify the facts, update the item if the suggestion is right, then call `progress_plan` with `action: resolve_suggestion`, the `plan` ID, the suggestion's `id` and `accepted: true`. If it is wrong, use `accepted: false` and a `reason`.
-- A suggestion is delivered to a model only once. If you ignore it, it stays open: the panel only counts it, no session is shown it again, and open suggestions keep the monitor from raising the same issue anew.
+- An open suggestion may be sent again to an eligible session after 30 minutes, up to 3 deliveries in total; the last reminder says it will not be sent again. After that, the band and panel still count it (the band only while the plan is active). Open suggestions keep the monitor from raising the same issue anew.
 
 ## When the board seems stuck
 

@@ -710,8 +710,9 @@ async function suggestionReminder($: EngineInterface, s: SessionRec): Promise<st
   if (!io || !paths) return undefined
   await refresh($)
   if (!lastSnap) return undefined
-  for (const p of plansInView(lastSnap)) {
-    const text = await takeSuggestions(io, paths, p.id, s.id, lastSnap.sessions)
+  const visible = new Set([...plansInView(lastSnap).map(p => p.id), ...(s.editedPlans ?? []).map(e => e.plan)])
+  for (const p of lastSnap.plans.filter(p => p.status === 'active' && visible.has(p.id))) {
+    const text = await takeSuggestions(io, paths, p.id, s.id, lastSnap.sessions, settings.awayMinutes * 60_000)
     if (text) return text
   }
   return undefined
@@ -734,9 +735,15 @@ function targetDraft(planArg?: string): Plan | undefined {
   return plans.find(p => p.status === 'draft' && (repo.has(p.id) || p.createdBy === self?.id)) ?? plans.find(p => p.status === 'draft')
 }
 
-/** The plan this session works on: the person accepted it here, or the model changed one of its items here. */
+/** Participation: the person accepted the plan here, or a main-loop set_item included a status. */
 function notePlanEdit(s: SessionRec, plan: string, at: number): void {
-  s.editedPlans = [...(s.editedPlans ?? []).filter(e => e.plan !== plan), { plan, at }].slice(-20)
+  const old = s.editedPlans?.find(e => e.plan === plan)
+  s.editedPlans = [...(s.editedPlans ?? []).filter(e => e.plan !== plan), { ...old, plan, at }].slice(-20)
+}
+
+function notePlanItemEdit(s: SessionRec, plan: string, itemAt: number): void {
+  const old = s.editedPlans?.find(e => e.plan === plan)
+  s.editedPlans = [...(s.editedPlans ?? []).filter(e => e.plan !== plan), { ...old, plan, itemAt }].slice(-20)
 }
 
 async function accept($: EngineInterface, id: string, kind: Approval['kind']): Promise<string> {
@@ -1038,8 +1045,12 @@ export const register: Register = (on, options) => {
       r = { text: result.text }
     } else r = await runPlanTool(input, ctx)
     if (typeof input.plan === 'string') planCache.delete(input.plan)
-    // A main-loop status change is this session working on the plan: confident attribution, never a claim.
-    if (e.agentId === undefined && input.action === 'set_item' && typeof input.status === 'string' && !r.isError && typeof input.plan === 'string') notePlanEdit(s, input.plan, await now($))
+    if (e.agentId === undefined && !r.isError && typeof input.plan === 'string'
+      && (input.action === 'set_item' || input.action === 'add_items' || input.action === 'resolve_suggestion')) {
+      const at = await now($)
+      if (input.action === 'set_item' && typeof input.status === 'string') notePlanEdit(s, input.plan, at)
+      notePlanItemEdit(s, input.plan, at)
+    }
     // Spent approval evidence is part of the record.
     await saveSelf($, true)
     await exportEnv($)

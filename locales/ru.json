@@ -1,4 +1,5 @@
 {
+  "banner.toCheck": "Проверить: {count}",
   "banner.m001": "{p0}Ждёт вас {p1}",
   "banner.m002": "Всего",
   "banner.m003": "  Завершено",
