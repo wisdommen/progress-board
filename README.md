@@ -30,6 +30,8 @@ It reads ordinary Claude Code events, your project files, git and (optionally) t
 - Pull request and branch checks move items forward when work is merged.
 - Ten bundled languages, with machine translation for others.
 
+It also ships a `progress-board` skill with rules for one item per mergeable PR or sub-plan, same-turn status updates and handling every check suggestion. It explains when sessions already running at installation need a restart.
+
 ## Install
 
 At the Claude Code prompt:

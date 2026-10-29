@@ -40,6 +40,9 @@ import { PLAN_ID, clip, envFileText, normQuote, shortHash } from './util'
 
 const PANE = 'progress-board'
 const COMMAND = 'progress'
+const PLUGIN_NAME = 'progress-board'
+const SKILL_NAME = 'progress-board'
+const QUALIFIED_SKILL = `${PLUGIN_NAME}:${SKILL_NAME}`
 const REFRESH_MS = 10_000
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 const DAY = 24 * 3600_000
@@ -1197,6 +1200,7 @@ export const register: Register = (on, options) => {
     const mine = [...new Set(liveClaims(self.claims, snap?.plans ?? []).map(c => c.plan))]
     const lines = [
       '## progress-board',
+      ...(e.tools.includes('Skill') ? [`Before proposing, importing or restructuring a plan, coordinating sessions on a plan, or handling check suggestions, load the ${QUALIFIED_SKILL} skill.`] : []),
       WORKER_DUTY,
       languageInstruction(),
       "Use progress_session to record this session's progress: set goal and steps when starting multi-step work, update as each step starts or finishes; claim a plan phase or item when working on it, release when stopping; declare orchestrator for long-running dispatch-led sessions.",

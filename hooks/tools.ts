@@ -105,7 +105,8 @@ export const planSpec: ToolSpec = {
     "question (an affirmative answer to a question naming this plan ID), or quote (verbatim quote and quoted_at, checked against this session's user messages). ",
     "Changes while the user is away (verbatim away_authorization, verified, or 30 minutes without input), or relayed by another session (relayed_by), take effect but await review. ",
     "Evidence may be used only once. ",
-    "Without evidence a new plan is a draft, not active; the user accepts it in /progress.",
+    "Without evidence a new plan is a draft, not active; the user accepts it in /progress. ",
+    "Before restructuring a plan, read the progress-board skill: one item per mergeable PR or sub-plan.",
   ].join(''),
   inputSchema: {
     type: 'object',

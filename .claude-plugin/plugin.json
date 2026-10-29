@@ -1,6 +1,6 @@
 {
   "name": "progress-board",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Session and overall-plan progress: a two-line band above the prompt and a /progress panel",
   "license": "MIT",
   "types": "./types/index.d.ts",
