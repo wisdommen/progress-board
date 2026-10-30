@@ -20,7 +20,7 @@ test('WR06 complete catalog messages reorder away window and void reason without
   installCatalogs({ ...catalogs, en: { ...catalogs.en, 'panel.awayWindow': '{duration} :: {to} <- {from}', 'panel.voidPhase': '{reason} :: {name}' } })
   on('state.get', async (_$, e, next) => {
     const actual = await next(e)
-    const values = { snapshot: snap, isHeadless: false, tick: 0, ui: { expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null } } as Record<string, unknown>
+    const values = { snapshot: snap, isHeadless: false, tick: 0, ui: { expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null } } as Record<string, unknown>
     return actual.value && e.key in values ? { value: { ...actual.value, value: values[e.key] as never } } : actual
   })
   on('command.run', () => ({ text: '' })); await $.command.run({ command: 'progress', args: '' } as never)

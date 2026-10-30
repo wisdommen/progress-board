@@ -49,7 +49,7 @@ const DAY = 24 * 3600_000
 
 const snapshot = atom({ plugin: 'progress-board', key: 'snapshot' } as const, null)
 const uiState = atom({ plugin: 'progress-board', key: 'ui' } as const,
-  { expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null } as PanelUi)
+  { expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null } as PanelUi)
 const tick = atom({ plugin: 'progress-board', key: 'tick' } as const, 0)
 const localeVersion = atom({ plugin: 'progress-board', key: 'localeVersion' } as const, 0)
 const headless = atom({ plugin: 'progress-board', key: 'isHeadless' } as const, false)
@@ -784,6 +784,23 @@ async function undoReview($: EngineInterface, reviewId: string): Promise<string>
   return 'error' in r ? r.error : tr('register.m018')
 }
 
+async function approveReview($: EngineInterface, reviewId: string): Promise<string> {
+  if (!io || !paths) return tr('register.m019')
+  const plan = lastSnap?.plans.find(p => p.reviews.some(r => r.id === reviewId))
+  if (!plan) return tr('register.m014')
+  const by = self?.id ?? 'person'
+  let summary = ''
+  const r = await mutatePlan(io, paths, plan.id, cur => {
+    const rv = cur?.reviews.find(x => x.id === reviewId)
+    if (!cur || !rv) return { error: tr('register.m015') }
+    summary = rv.summary
+    const next = { ...cur, reviews: cur.reviews.filter(x => x.id !== reviewId) }
+    return { plan: next, log: [{ by, action: 'reviewed', detail: tr('register.m021', { p0: 1 }) }], md: renderPlanMd(next) }
+  }).catch((e: unknown) => ({ error: String(e) }))
+  later($)
+  return 'error' in r ? r.error : tr('register.m058', { p0: summary })
+}
+
 async function keepReviews($: EngineInterface, planId: string): Promise<string> {
   if (!io || !paths) return tr('register.m019')
   const by = self?.id ?? 'person'
@@ -1429,12 +1446,8 @@ export const register: Register = (on, options) => {
       reject: id => void reject($, id, '', 'panel').then(t => $.ui.toast(t)),
       edit: id => void $.prompt.fill({ text: tr('register.m055', { p0: id }), mode: 'replace' }).catch(() => undefined),
       toggleReview: () => setUi(u => ({ ...u, showReview: !u.showReview })),
-      selectReview: id => setUi(u => ({ ...u, selectedReview: u.selectedReview === id ? null : id })),
-      undo: () => {
-        const id = ui.selectedReview
-        if (!id) { $.ui.toast(tr('register.m056')); return }
-        void undoReview($, id).then(t => { $.ui.toast(t); setUi(u => ({ ...u, selectedReview: null })) })
-      },
+      approveReview: id => void approveReview($, id).then(t => $.ui.toast(t)),
+      rejectReview: id => void undoReview($, id).then(t => $.ui.toast(t)),
       refresh: () => later($),
       pickNext: () => {
         const ids = snap.plans.filter(p => p.status === 'active' && (snap.repoPlans.includes(p.id) || snap.sessions.some(s => s.isSelf && s.claims.some(c => c.plan === p.id)))).map(p => p.id)

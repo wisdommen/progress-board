@@ -349,7 +349,6 @@ export type PanelUi = {
   activityCount?: number
   expanded: string[]
   showReview: boolean
-  selectedReview: string | null
   showRelated: boolean
   showEnded: boolean
   pick: string | null

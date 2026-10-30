@@ -19,9 +19,9 @@ const nodes = (n: any): any[] => [n, ...kids(n).flatMap(nodes)].filter(n => n &&
 const text = (n: any): string => typeof n === 'string' || typeof n === 'number' ? String(n) : kids(n).map(text).join('')
 const find = (n: any, key: string) => nodes(n).find(n => n.props.key === key)
 const noop = () => {}
-const ui = (): PanelUi => ({ expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null })
+const ui = (): PanelUi => ({ expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null })
 const snap = (): Snapshot => ({ now: NOW, selfId: 's1', focusPlan: PLAN, repoPlans: [PLAN], plans: [plan()], sessions: [{ ...session({ claims: [claim()] }), isAlive: true, isSelf: true, attribution: { confident: [], speculative: [] } } as any], recent: [], waiting: [] })
-const panelActions: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, selectReview: noop, undo: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
+const panelActions: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, approveReview: noop, rejectReview: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
 const priorityActions = { change: noop, picker: noop, unclaimed: noop, dispatch: (item: string) => els.Button({ key: `dispatch-${item}`, plain: true, children: '▶$' }) }
 
 test('V06c progress uses the active glyph for both phase and claimed item, never dispatch', () => {

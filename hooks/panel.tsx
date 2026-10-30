@@ -33,8 +33,9 @@ export type PanelActions = {
   reject: (plan: string) => void
   edit: (plan: string) => void
   toggleReview: () => void
-  selectReview: (id: string) => void
-  undo: () => void
+  /** Keeps a reviewed change and clears its review; `rejectReview` reverses it. */
+  approveReview: (id: string) => void
+  rejectReview: (id: string) => void
   refresh: () => void
   pickNext: () => void
   /** Opens or closes a phase's items; `wasOpen` is how it was drawn. */
@@ -159,22 +160,30 @@ function renderProgress(els: Els, snap: Snapshot, ui: PanelUi, cols: number, gly
           firstDraft = false
         } else rows.push(<Text dimColor>  /progress accept {w.plan}</Text>)
       } else if (w.kind === 'review') {
+        const reviews = byId.get(w.plan)?.reviews ?? []
+        const only = reviews.length === 1 ? reviews[0] : undefined
         rows.push(
           <Box flexDirection="row">
             <Text wrap="truncate-end"><Text color="warning">{tr('panel.reviewCount', { count: w.count })}</Text>{clip(w.first, 30)}{w.count > 1 ? tr('panel.m033') : ''}  </Text>
+            {only ? [
+              <Button key={`ok-${only.id}`} hotkey="y" label={tr('panel.m036')} onPress={() => act.approveReview(only.id)} />,
+              <Button key={`no-${only.id}`} hotkey="n" label={tr('panel.m037')} onPress={() => act.rejectReview(only.id)} />,
+            ] : null}
             <Button key={`v-${w.plan}`} hotkey="v" label={tr('panel.m034')} onPress={() => act.toggleReview()} />
           </Box>,
         )
         if (ui.showReview) {
-          for (const r of byId.get(w.plan)?.reviews ?? []) {
-            const sel = ui.selectedReview === r.id
+          for (const r of reviews) {
             rows.push(
-              <Button key={`rv-${r.id}`} plain onPress={() => act.selectReview(r.id)}>
-                {sel ? '▸ ' : '  '}{clip(r.summary, 40)} <Text dimColor>{ago(now - r.at)} · {r.reason}{r.relayedBy ? tr('panel.m035', { p0: r.relayedBy }) : ''}</Text>
-              </Button>,
+              <Box flexDirection="row">
+                <Text wrap="truncate-end">  {clip(r.summary, 40)} <Text dimColor>{ago(now - r.at)} · {r.reason}{r.relayedBy ? tr('panel.m035', { p0: r.relayedBy }) : ''}</Text>  </Text>
+                {only ? null : [
+                  <Button key={`ok-${r.id}`} label={tr('panel.m036')} onPress={() => act.approveReview(r.id)} />,
+                  <Button key={`no-${r.id}`} label={tr('panel.m037')} onPress={() => act.rejectReview(r.id)} />,
+                ]}
+              </Box>,
             )
           }
-          rows.push(<Button key="undo" hotkey="u" label={ui.selectedReview ? tr('panel.m036') : tr('panel.m037')} onPress={() => act.undo()} />)
         }
       } else if (w.kind === 'ask') {
         rows.push(

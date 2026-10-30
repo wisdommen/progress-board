@@ -26,7 +26,7 @@ const seed = (snap: Snapshot) => async (_$: unknown, e: { key: string }, next: (
   const actual = await next(e)
   const values: Record<string, unknown> = {
     snapshot: snap, isHeadless: false, tick: 0,
-    ui: { expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null },
+    ui: { expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null },
   }
   return e.key in values ? { value: { ...actual.value, value: values[e.key] } } : actual
 }

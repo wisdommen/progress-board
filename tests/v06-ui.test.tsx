@@ -16,10 +16,10 @@ const children = (n: any): any[] => !n || typeof n !== 'object' ? [] : [n.props?
 const nodes = (n: any): any[] => [n, ...children(n).flatMap(nodes)].filter(x => x && typeof x === 'object')
 const find = (n: any, key: string) => nodes(n).find(x => x.props?.key === key)
 const text = (n: any): string => typeof n === 'string' || typeof n === 'number' ? String(n) : children(n).map(text).join('')
-const ui = (): PanelUi => ({ expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null })
+const ui = (): PanelUi => ({ expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null })
 const snap = (): Snapshot => ({ now: NOW, selfId: 's1', focusPlan: PLAN, repoPlans: [PLAN], plans: [plan()], sessions: [{ ...session(), isAlive: true, isSelf: true, attribution: { confident: [], speculative: [] } } as any], recent: [], waiting: [] })
 const noop = () => {}
-const panelActions: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, selectReview: noop, undo: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
+const panelActions: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, approveReview: noop, rejectReview: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
 
 test('V06 UI tabs use plain orange bold labels, width underline and a dim rule; progress has no dispatch', () => {
  const s = snap(); let calls = 0

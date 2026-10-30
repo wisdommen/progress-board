@@ -91,10 +91,10 @@ const text = (n: any): string => typeof n === 'string' || typeof n === 'number' 
 const noop = () => {}
 for (const cols of [37, 80]) test(`V06b ${cols}-column Chinese tabs keep complete hotkey-label pairs and label-aligned underlines`, () => {
   setLocale('zh-CN')
-  const state: PanelUi = { expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null }
+  const state: PanelUi = { expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null }
   const snap: Snapshot = { now: 1800000000000, selfId: 's1', focusPlan: null, repoPlans: [], plans: [], sessions: [], recent: [], waiting: [] }
   const selected: string[] = []
-  const tree = renderPanel(els, snap, state, cols, '■', { accept: noop, reject: noop, edit: noop, toggleReview: noop, selectReview: noop, undo: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop, selectTab: name => selected.push(name) }) as any
+  const tree = renderPanel(els, snap, state, cols, '■', { accept: noop, reject: noop, edit: noop, toggleReview: noop, approveReview: noop, rejectReview: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop, selectTab: name => selected.push(name) }) as any
   const line = kids(tree)[0], columns = kids(line)
   expect(line.props.flexWrap).toBe('wrap')
   let occupied = (columns.length - 1) * line.props.gap

@@ -11,9 +11,9 @@ const els = Object.fromEntries(['Box', 'Text', 'Button'].map(type => [type, (pro
 const children = (n: any): any[] => !n || typeof n !== 'object' ? [] : [n.props?.children].flat(Infinity).filter(Boolean)
 const nodes = (n: any): any[] => [n, ...children(n).flatMap(nodes)].filter(x => x && typeof x === 'object')
 const text = (n: any): string => typeof n === 'string' || typeof n === 'number' ? String(n) : children(n).map(text).join('')
-const ui = (over: Partial<PanelUi> = {}): PanelUi => ({ expanded: [], showReview: false, selectedReview: null, showRelated: false, showEnded: false, pick: null, ...over })
+const ui = (over: Partial<PanelUi> = {}): PanelUi => ({ expanded: [], showReview: false, showRelated: false, showEnded: false, pick: null, ...over })
 const noop = () => {}
-const act: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, selectReview: noop, undo: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
+const act: any = { accept: noop, reject: noop, edit: noop, toggleReview: noop, approveReview: noop, rejectReview: noop, refresh: noop, pickNext: noop, togglePhase: noop, toggleExpand: noop, toggleRelated: noop, toggleEnded: noop, dismissAway: noop }
 const self = { ...session(), isAlive: true, isSelf: true, attribution: { confident: [], speculative: [] } } as any
 const snapOf = (plans: Plan[], waiting: Snapshot['waiting'] = [], focusPlan: string | null = null): Snapshot =>
   ({ now: NOW, selfId: 's1', focusPlan, repoPlans: [], plans, sessions: [self], recent: [], waiting })

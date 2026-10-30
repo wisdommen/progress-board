@@ -119,9 +119,9 @@ test('V062 skill body covers suggestions and splitting oversized items', () => {
   for (const name of ['resolve_suggestion', 'add_items', 'void']) assert.ok(body.includes(name), name)
 })
 
-test('V063 plugin manifest declares version 0.6.3', () => {
+test('V063 plugin manifest declares version 0.6.5', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin/plugin.json'), 'utf8'))
-  assert.equal(manifest.version, '0.6.3')
+  assert.equal(manifest.version, '0.6.5')
 })
 
 test('V063 check suggestions describe 30-minute redelivery capped at three deliveries', () => {
