@@ -26,7 +26,7 @@ import type { ProgressEvent } from '../types'
 import { attachCreatedPr, CHECK_MS, pollFacts } from './facts'
 import { monitorView, runMonitor, takeSuggestions } from './monitor'
 import {
-  RETAIN_MS, answeredQuestions, applyUndo, awayReportOf, dispatchItemOf, isAskAnswered, liveClaims, liveItemClaims, publishKey, questionApprovals, recordAnswers, rejectDraft, renderPlanMd, sessionFate, sessionName, waitingItems,
+  RETAIN_MS, answeredQuestions, applyUndo, awayReportOf, dispatchItemOf, isAskAnswered, liveClaims, liveItemClaims, publishKey, questionApprovals, recordAnswers, rejectDraft, renderPlanMd, sessionFate, sessionName, waitingItems, withSuccessors,
 } from './model'
 import { renderPanel } from './panel'
 import { ENFORCE_DENY, RECENT_CALLS, autoGoalOf, callSummary, firstMessageOf, isOwnPrompt, shouldEnforce, takeStepNudge } from './nudge'
@@ -414,7 +414,7 @@ async function build($: EngineInterface): Promise<{ snap: Snapshot; gone: Sessio
     const idx = await readRepo(io as Io, paths as Paths, key)
     const fromIdx = Object.entries(idx?.plans ?? {}).sort((a, b) => b[1].count - a[1].count || b[1].lastAt - a[1].lastAt).map(([p]) => p)
     const declared = root ? plans.filter(p => p.repos.some(r => r.replace(/\/+$/, '') === root)).map(p => p.id) : []
-    const list = [...new Set([...fromIdx, ...declared])]
+    const list = withSuccessors([...fromIdx, ...declared], plans)
     repoCache.set(key, list)
     return list
   }

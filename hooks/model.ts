@@ -647,6 +647,19 @@ export function newReview(id: string, now: number, summary: string, reason: stri
   return { id, at: now, summary, reason, by, ...(approval.relayedBy ? { relayedBy: approval.relayedBy } : {}), ...(isAway ? { isAway } : {}), undo }
 }
 
+/**
+ * A directory's plans plus, for each finished or abandoned one, the active plans sharing its project prefix
+ * (`acme/` of `acme/v1`), newest first: a milestone's successor shows where its predecessor was used, even
+ * when it was proposed with other repos.
+ */
+export function withSuccessors(ids: readonly string[], plans: readonly Pick<Plan, 'id' | 'status' | 'createdAt'>[]): string[] {
+  const byId = new Map(plans.map(p => [p.id, p]))
+  const prefixes = new Set(ids.map(id => byId.get(id)).filter(p => p && (p.status === 'done' || p.status === 'abandoned') && p.id.includes('/'))
+    .map(p => p!.id.slice(0, p!.id.indexOf('/') + 1)))
+  const next = plans.filter(p => p.status === 'active' && [...prefixes].some(pre => p.id.startsWith(pre))).sort((a, b) => b.createdAt - a.createdAt).map(p => p.id)
+  return [...new Set([...ids, ...next])]
+}
+
 /** Claims that still count: on plans that are active (ended plans release their claims). */
 export function liveClaims(claims: readonly Claim[], plans: readonly Pick<Plan, 'id' | 'status'>[]): Claim[] {
   const active = new Set(plans.filter(p => p.status === 'active').map(p => p.id))

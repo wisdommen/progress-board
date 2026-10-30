@@ -99,7 +99,7 @@ export const planSpec: ToolSpec = {
     "set_item changes todo / wrapping (finished, awaiting review/acceptance/merge) / done / void; reverting requires reason. ",
     "done_at backfills completion time; milestone is the passed-station count (0..milestone count; reverting requires reason; done implies all passed). ",
     "Mark done only after confirming criteria are met with meets_criteria: true; abandon cancels the plan. ",
-    "set_item refs merges PR/branch references; propose / set auto_done_on_merge defaults false, enable only when criteria allow merge to imply done. ",
+    "set_item refs merges PR/branch references; propose / set auto_done_on_merge defaults false, enable only when criteria allow merge to imply done. set repos replaces the plan's directories (no approval required). ",
     "resolve_suggestion uses id and accepted to accept or reject a suggestion; rejection requires reason. Verify and update with set_item first, then resolve; suggestions never execute automatically. ",
     "Phase changes (propose, confirm, phase edits) need user approval evidence: approval kind=plan_mode (just approved), ",
     "question (an affirmative answer to a question naming this plan ID), or quote (verbatim quote and quoted_at, checked against this session's user messages). ",
@@ -128,7 +128,7 @@ export const planSpec: ToolSpec = {
       title: { type: 'string' },
       goal: { type: 'string' },
       criteria: { type: 'string', description: "Completion criteria; may specify exceptions (e.g. To Test does not block completion)" },
-      repos: { type: 'array', items: { type: 'string' }, description: "Repository paths" },
+      repos: { type: 'array', items: { type: 'string' }, description: "propose / set: directories where the plan shows (set replaces the list; include the directory the person views the board from)" },
       milestones: { type: 'array', items: { type: 'string' }, description: "propose / set_milestones: item milestones (e.g. open PR, checks pass, merge, deploy)" },
       phases: {
         type: 'array',
@@ -490,15 +490,31 @@ export async function runPlanTool(input: Record<string, unknown>, ctx: ToolCtx):
         tr('tools.m101', { p0: list.join(' → '), p1: clamped ? tr('tools.m102', { p0: clamped }) : '' }))
     }
     if (action === 'set') {
-      if (typeof input['auto_done_on_merge'] !== 'boolean') return { error: tr('tools.m103') }
-      const settingsPath = `${ctx.paths.planDir(id)}/settings.json`
-      const settings = parseJson<Record<string, unknown>>(await ctx.io.read(settingsPath))
-      const plan = { ...cur, auto_done_on_merge: input['auto_done_on_merge'] }
-      if (settings) {
-        await guard(); await ctx.io.writeAtomic(settingsPath, JSON.stringify({ ...settings, autoDone: input['auto_done_on_merge'] }))
-        delete (plan as Plan).auto_done_on_merge
+      const autoDone = input['auto_done_on_merge']
+      const reposIn = input['repos']
+      if (typeof autoDone !== 'boolean' && reposIn === undefined) return { error: tr('tools.m103') }
+      // Repos only say where the plan shows up: no approval needed. The list replaces the old one.
+      const repos = Array.isArray(reposIn) ? reposIn.map(r => (typeof r === 'string' ? r.trim().replace(/(.)\/+$/, '$1') : '')) : []
+      if (reposIn !== undefined && (repos.length === 0 || repos.some(r => !r))) return { error: tr('tools.m120') }
+      let plan: Plan = reposIn === undefined ? { ...cur } : { ...cur, repos: [...new Set(repos)] }
+      const log: Omit<LogEntry, 'at' | 'plan'>[] = []
+      const notes: string[] = []
+      if (reposIn !== undefined) {
+        log.push({ by, action, detail: tr('tools.m121', { p0: displayList(plan.repos) }) })
+        notes.push(tr('tools.m122', { p0: displayList(plan.repos) }))
       }
-      return done(plan, [{ by, action, detail: tr('tools.m104', { p0: input['auto_done_on_merge'] ? tr('tools.m105') : tr('tools.m106') }) }], tr('tools.m107'))
+      if (typeof autoDone === 'boolean') {
+        const settingsPath = `${ctx.paths.planDir(id)}/settings.json`
+        const settings = parseJson<Record<string, unknown>>(await ctx.io.read(settingsPath))
+        plan = { ...plan, auto_done_on_merge: autoDone }
+        if (settings) {
+          await guard(); await ctx.io.writeAtomic(settingsPath, JSON.stringify({ ...settings, autoDone }))
+          delete plan.auto_done_on_merge
+        }
+        log.push({ by, action, detail: tr('tools.m104', { p0: autoDone ? tr('tools.m105') : tr('tools.m106') }) })
+        notes.push(tr('tools.m107'))
+      }
+      return done(plan, log, notes.join(' '))
     }
     if (action === 'set_item') {
       const refs = input['refs'] === undefined ? undefined : parseRefs(input['refs'])
