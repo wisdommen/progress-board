@@ -577,5 +577,7 @@
   "cost.compactHelp": "Após confirmar, o modelo de destino resume o contexto uma vez; os tokens variáveis contam no seu uso.",
   "cost.dispatchHelp": "Inicia um turno do modelo coordenador ou um Agent; tokens da tarefa e contexto contam no seu uso.",
   "cost.messageHelp": "Uma mensagem pode iniciar um turno do modelo receptor; contexto e resposta contam no seu uso.",
-  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}"
+  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
+  "pane.inactive": "progress-board está inativo nesta sessão (sem interface ou falha na inicialização).",
+  "pane.failed": "progress-board não conseguiu desenhar este painel:"
 }

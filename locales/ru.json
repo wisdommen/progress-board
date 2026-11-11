@@ -577,5 +577,7 @@
   "cost.compactHelp": "После подтверждения целевая модель один раз обобщает контекст; токены зависят от контекста и учитываются в расходе.",
   "cost.dispatchHelp": "Запускает ход модели координатора или Agent; токены задачи и контекста учитываются в расходе.",
   "cost.messageHelp": "Сообщение может запустить ход модели получателя; токены контекста и ответа учитываются в расходе.",
-  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}"
+  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
+  "pane.inactive": "progress-board неактивен в этом сеансе (без интерфейса или ошибка инициализации).",
+  "pane.failed": "progress-board не удалось отрисовать эту панель:"
 }

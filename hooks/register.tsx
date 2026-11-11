@@ -16,7 +16,7 @@ export let i18n: I18nController | null = null
 // progress-board: session + overall-plan progress band, /progress panel, model tools, hook recording.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderInput } from 'claude-code'
 
 import type { Approval, BgTask, Claim, PanelUi, Plan, SessionRec, SessionView, Snapshot } from '../types'
 import { activePlanIds, exportPlanOf, inheritFrom, isReviewer, resolveAttributions, taskPlanOf } from './attrib'
@@ -316,6 +316,9 @@ async function init($: EngineInterface, start: { cwd: string; isInteractive: boo
     await update($, headless, () => true).catch(() => undefined)
     return
   }
+  // The flag is state, so it outlives the module (a reload, a restart): a value an earlier headless start
+  // left behind would blank this interactive session's band and pane, so this start clears it.
+  await update($, headless, () => false).catch(() => undefined)
   i18n ??= createI18n($, { backgroundTranslation: true, onChange: async () => {
     lastSnapKey = ''; await update($, localeVersion, n => n + 1);
     if (lastSnap) await update($, snapshot, () => lastSnap)
@@ -1367,108 +1370,130 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     void ensureInit($)
-    if (isOff || await read($, headless)) return next(e)
-    const elements = $.ui.resolve(e)
-    const { Box, Text, Button } = elements
-    const Input = 'Input' in elements ? elements.Input : undefined
-    await read($, localeVersion)
-    const snap = await read($, snapshot)
-    if (!snap) return <Box><Text dimColor>{tr('register.m054')}</Text></Box>
-    const storedUi = await read($, uiState)
-    const languageChoice = await $.store.get('language').catch(() => undefined)
-    const ui: PanelUi = { ...storedUi, settingLanguage: typeof languageChoice === 'string' ? languageChoice : null }
-    const setUi = (fn: (u: PanelUi) => PanelUi) => void update($, uiState, fn).then(() => later($)).catch(() => undefined)
-    return renderPanel({ Box, Text, Button, Input }, snap, ui, e.props.bodyColumns, glyph, {
-      selectTab: tab => setUi(u => ({ ...u, tab })),
-      pickPlan: pick => setUi(u => ({ ...u, pick, search: '', itemFilter: 'all' })),
-      filterItems: itemFilter => setUi(u => ({ ...u, itemFilter })),
-      searchItems: search => setUi(u => ({ ...u, search: search.slice(0, 200) })),
-      focusSearch: () => { void $.prompt.fill({ text: '/progress find ', mode: 'replace' }) },
-      toggleDaily: () => setUi(u => ({ ...u, showDaily: !u.showDaily })),
-      activity: {
-        filter: activityFilter => setUi(u => ({ ...u, activityFilter, activityCount: 40 })),
-        more: () => setUi(u => ({ ...u, activityCount: (u.activityCount ?? 40) + 40 })),
-      },
-      sessions: {
-        select: id => setUi(u => ({ ...u, expandedRow: u.expandedRow === `session:${id}` ? undefined : `session:${id}`, priorityPicker: undefined })),
-        control: (target, action) => { void (async () => {
-          if (!self || !io || !paths) return
-          if ((action === 'compact' || action === 'abort') && (target.isSelf || !await confirmed($, `${action}:${target.id}`))) return
-          if (target.controlVersion !== 1) { $.ui.toast(tr('common.unavailable')); return }
-          const request = await createControlIntent($, { self, io, paths, turnId: () => runningTurn, save: () => saveSelf($, true) }, { action: action === 'abort' ? 'interrupt' : action, target: target.id }, 'panel', controlRequest(action, target))
-          await $.prompt.fill({ text: request, mode: 'replace' })
-          $.ui.toast(tr('control.submitRequest'))
-        })().catch(error => $.ui.toast(tr('control.failed', { reason: String(error) }))) },
-      },
-      priorities: {
-        dispatch: item => <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          <Button key={`dispatch-${item}`} plain label="▶" onPress={async () => {
-            const id = snap.focusPlan, key = `dispatch:${id}:${item}`
-            if (!id || !io || !paths || !self || dispatching.has(key)) return
-            dispatching.add(key)
-            let accepted = false
-            try {
-              if (!await confirmed($, key)) return
-              accepted = true
-              const currentUi = await read($, uiState)
-              const interrupt = currentUi.interruptDispatch === true
-              const request = await createControlIntent($, { self, io, paths, turnId: () => runningTurn, save: () => saveSelf($, true) }, { action: 'dispatch_now', target: dispatchTarget(id, snap.sessions, self).id, plan: id, item, interrupt }, 'panel', dispatchRequest(id, item, interrupt))
-              await $.prompt.fill({ text: request, mode: 'replace' })
-              $.ui.toast(tr('control.submitRequest'))
-            } catch (e) { $.ui.toast(tr('control.failed', { reason: String(e) })) }
-            finally {
-              if (accepted) await update($, uiState, state => ({ ...state, interruptDispatch: false }))
-              dispatching.delete(key); planCache.delete(id); await refresh($)
-            }
-          }}><Text color="claude">▶</Text><Text color="warning">$</Text></Button>
-          {ui.confirmation?.key === `dispatch:${snap.focusPlan}:${item}` ? <Text dimColor>{tr('dispatch.confirm')}</Text> : ''}
-          {ui.confirmation?.key === `dispatch:${snap.focusPlan}:${item}` ? <Button key={`dispatch-interrupt-${item}`} plain onPress={() => setUi(u => ({ ...u, interruptDispatch: !u.interruptDispatch }))}><Text dimColor>{ui.interruptDispatch ? '[✓] ' : '[ ] '}{tr('dispatch.interrupt')}</Text></Button> : ''}
-        </Box>,
-        change: (target, level) => { if (snap.focusPlan && io && paths) void setPriority(io, paths, snap.focusPlan, target, level, self?.id ?? 'person', { source: 'panel' }).then(async result => {
-          $.ui.toast('error' in result ? result.error : tr('priority.saved', { name: target.item ?? target.phase }))
-          if (!('error' in result)) planCache.delete(result.plan.id)
-          setUi(u => ({ ...u, priorityPicker: undefined, expandedRow: undefined })); await refresh($)
-        }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
-        picker: key => setUi(u => ({ ...u, expandedRow: u.expandedRow === `priority:${key}` ? undefined : `priority:${key}`, priorityPicker: undefined })),
-        unclaimed: () => setUi(u => ({ ...u, unclaimedOnly: !u.unclaimedOnly })),
-      },
-      settings: {
-        select: key => setUi(u => ({ ...u, selectedSetting: key })),
-        chooseSetting: (key, value) => { void writeSetting($, key, value).then(() => refresh($)).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
-        choosePlanSetting: (key, value) => { if (snap.focusPlan && io && paths) void writePlanSetting(io, paths, snap.focusPlan, key, value).then(() => { planCache.delete(snap.focusPlan!); return refresh($) }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
-        setting: key => { void cycleSetting($, key, settings).then(() => refresh($)).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
-        planSetting: key => { if (snap.focusPlan && io && paths) void cyclePlanSetting(io, paths, snap.focusPlan, key).then(() => { planCache.delete(snap.focusPlan!); return refresh($) }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
-        language: code => { void i18n?.setLanguage(code).then(() => refresh($)) },
-        otherLanguage: () => { void $.prompt.fill({ text: '/progress lang ', mode: 'replace' }) },
-        retranslate: () => { void i18n?.retranslate().then(() => refresh($)) },
-      },
-      accept: id => void accept($, id, 'panel').then(t => $.ui.toast(t)),
-      reject: id => void reject($, id, '', 'panel').then(t => $.ui.toast(t)),
-      edit: id => void $.prompt.fill({ text: tr('register.m055', { p0: id }), mode: 'replace' }).catch(() => undefined),
-      toggleReview: () => setUi(u => ({ ...u, showReview: !u.showReview })),
-      approveReview: id => void approveReview($, id).then(t => $.ui.toast(t)),
-      rejectReview: id => void undoReview($, id).then(t => $.ui.toast(t)),
-      refresh: () => later($),
-      pickNext: () => {
-        const ids = snap.plans.filter(p => p.status === 'active' && (snap.repoPlans.includes(p.id) || snap.sessions.some(s => s.isSelf && s.claims.some(c => c.plan === p.id)))).map(p => p.id)
-        if (ids.length < 2) { $.ui.toast(tr('register.m057')); return }
-        const cur = snap.focusPlan ? ids.indexOf(snap.focusPlan) : -1
-        const nextId = ids[(cur + 1) % ids.length] ?? null
-        setUi(u => ({ ...u, pick: nextId }))
-      },
-      togglePhase: (id, wasOpen) => setUi(u => ({ ...u, expanded: [...u.expanded.filter(k => k !== `open-${id}` && k !== `shut-${id}`), wasOpen ? `shut-${id}` : `open-${id}`] })),
-      toggleExpand: key => setUi(u => ({ ...u, expanded: u.expanded.includes(key) ? u.expanded.filter(k => k !== key) : [...u.expanded, key] })),
-      toggleRelated: () => setUi(u => ({ ...u, showRelated: !u.showRelated })),
-      toggleEnded: () => setUi(u => ({ ...u, showEnded: !u.showEnded })),
-      dismissAway: () => {
-        void (async () => {
-          const s = await ensureSelf($)
-          if (!s?.away) return
-          s.away.dismissedAt = await now($)
-          await saveSelf($, true)
-          await refresh($)
-        })().catch(() => undefined)
-      },
-    })
+    // The pane never comes out blank: an off session and a failed draw each say so on screen.
+    try {
+      if (isOff || await read($, headless)) {
+        const { Box, Text } = $.ui.resolve(e)
+        return <Box><Text dimColor>{paneText('pane.inactive', 'progress-board is inactive in this session (headless or initialization failed).')}</Text></Box>
+      }
+      return await drawPane($, e)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      try { await $.ui.log(`progress-board: pane draw failed: ${error instanceof Error && error.stack ? error.stack : reason}`, { to: 'debug' }) } catch { /* Diagnostics never replace the visible reason. */ }
+      const { Box, Text } = $.ui.resolve(e)
+      return <Box flexDirection="column"><Text color="error">{paneText('pane.failed', 'progress-board could not draw this panel:')}</Text><Text dimColor wrap="wrap">{reason}</Text></Box>
+    }
+  })
+}
+
+/** A headless start never loads the catalogs, so `tr` would answer the bare key: English stands in. */
+function paneText(key: 'pane.inactive' | 'pane.failed', english: string): string {
+  const text = tr(key)
+  return text === key ? english : text
+}
+
+/** Draws the pane for a session that is on; `ui.render` catches what it throws and shows it. */
+async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
+  const elements = $.ui.resolve(e)
+  const { Box, Text, Button } = elements
+  const Input = 'Input' in elements ? elements.Input : undefined
+  await read($, localeVersion)
+  const snap = await read($, snapshot)
+  if (!snap) return <Box><Text dimColor>{tr('register.m054')}</Text></Box>
+  const storedUi = await read($, uiState)
+  const languageChoice = await $.store.get('language').catch(() => undefined)
+  const ui: PanelUi = { ...storedUi, settingLanguage: typeof languageChoice === 'string' ? languageChoice : null }
+  const setUi = (fn: (u: PanelUi) => PanelUi) => void update($, uiState, fn).then(() => later($)).catch(() => undefined)
+  return renderPanel({ Box, Text, Button, Input }, snap, ui, e.props.bodyColumns, glyph, {
+    selectTab: tab => setUi(u => ({ ...u, tab })),
+    pickPlan: pick => setUi(u => ({ ...u, pick, search: '', itemFilter: 'all' })),
+    filterItems: itemFilter => setUi(u => ({ ...u, itemFilter })),
+    searchItems: search => setUi(u => ({ ...u, search: search.slice(0, 200) })),
+    focusSearch: () => { void $.prompt.fill({ text: '/progress find ', mode: 'replace' }) },
+    toggleDaily: () => setUi(u => ({ ...u, showDaily: !u.showDaily })),
+    activity: {
+      filter: activityFilter => setUi(u => ({ ...u, activityFilter, activityCount: 40 })),
+      more: () => setUi(u => ({ ...u, activityCount: (u.activityCount ?? 40) + 40 })),
+    },
+    sessions: {
+      select: id => setUi(u => ({ ...u, expandedRow: u.expandedRow === `session:${id}` ? undefined : `session:${id}`, priorityPicker: undefined })),
+      control: (target, action) => { void (async () => {
+        if (!self || !io || !paths) return
+        if ((action === 'compact' || action === 'abort') && (target.isSelf || !await confirmed($, `${action}:${target.id}`))) return
+        if (target.controlVersion !== 1) { $.ui.toast(tr('common.unavailable')); return }
+        const request = await createControlIntent($, { self, io, paths, turnId: () => runningTurn, save: () => saveSelf($, true) }, { action: action === 'abort' ? 'interrupt' : action, target: target.id }, 'panel', controlRequest(action, target))
+        await $.prompt.fill({ text: request, mode: 'replace' })
+        $.ui.toast(tr('control.submitRequest'))
+      })().catch(error => $.ui.toast(tr('control.failed', { reason: String(error) }))) },
+    },
+    priorities: {
+      dispatch: item => <Box flexDirection="row" flexWrap="wrap" gap={1}>
+        <Button key={`dispatch-${item}`} plain label="▶" onPress={async () => {
+          const id = snap.focusPlan, key = `dispatch:${id}:${item}`
+          if (!id || !io || !paths || !self || dispatching.has(key)) return
+          dispatching.add(key)
+          let accepted = false
+          try {
+            if (!await confirmed($, key)) return
+            accepted = true
+            const currentUi = await read($, uiState)
+            const interrupt = currentUi.interruptDispatch === true
+            const request = await createControlIntent($, { self, io, paths, turnId: () => runningTurn, save: () => saveSelf($, true) }, { action: 'dispatch_now', target: dispatchTarget(id, snap.sessions, self).id, plan: id, item, interrupt }, 'panel', dispatchRequest(id, item, interrupt))
+            await $.prompt.fill({ text: request, mode: 'replace' })
+            $.ui.toast(tr('control.submitRequest'))
+          } catch (e) { $.ui.toast(tr('control.failed', { reason: String(e) })) }
+          finally {
+            if (accepted) await update($, uiState, state => ({ ...state, interruptDispatch: false }))
+            dispatching.delete(key); planCache.delete(id); await refresh($)
+          }
+        }}><Text color="claude">▶</Text><Text color="warning">$</Text></Button>
+        {ui.confirmation?.key === `dispatch:${snap.focusPlan}:${item}` ? <Text dimColor>{tr('dispatch.confirm')}</Text> : ''}
+        {ui.confirmation?.key === `dispatch:${snap.focusPlan}:${item}` ? <Button key={`dispatch-interrupt-${item}`} plain onPress={() => setUi(u => ({ ...u, interruptDispatch: !u.interruptDispatch }))}><Text dimColor>{ui.interruptDispatch ? '[✓] ' : '[ ] '}{tr('dispatch.interrupt')}</Text></Button> : ''}
+      </Box>,
+      change: (target, level) => { if (snap.focusPlan && io && paths) void setPriority(io, paths, snap.focusPlan, target, level, self?.id ?? 'person', { source: 'panel' }).then(async result => {
+        $.ui.toast('error' in result ? result.error : tr('priority.saved', { name: target.item ?? target.phase }))
+        if (!('error' in result)) planCache.delete(result.plan.id)
+        setUi(u => ({ ...u, priorityPicker: undefined, expandedRow: undefined })); await refresh($)
+      }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
+      picker: key => setUi(u => ({ ...u, expandedRow: u.expandedRow === `priority:${key}` ? undefined : `priority:${key}`, priorityPicker: undefined })),
+      unclaimed: () => setUi(u => ({ ...u, unclaimedOnly: !u.unclaimedOnly })),
+    },
+    settings: {
+      select: key => setUi(u => ({ ...u, selectedSetting: key })),
+      chooseSetting: (key, value) => { void writeSetting($, key, value).then(() => refresh($)).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
+      choosePlanSetting: (key, value) => { if (snap.focusPlan && io && paths) void writePlanSetting(io, paths, snap.focusPlan, key, value).then(() => { planCache.delete(snap.focusPlan!); return refresh($) }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
+      setting: key => { void cycleSetting($, key, settings).then(() => refresh($)).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
+      planSetting: key => { if (snap.focusPlan && io && paths) void cyclePlanSetting(io, paths, snap.focusPlan, key).then(() => { planCache.delete(snap.focusPlan!); return refresh($) }).catch(e => $.ui.toast(tr('control.failed', { reason: String(e) }))) },
+      language: code => { void i18n?.setLanguage(code).then(() => refresh($)) },
+      otherLanguage: () => { void $.prompt.fill({ text: '/progress lang ', mode: 'replace' }) },
+      retranslate: () => { void i18n?.retranslate().then(() => refresh($)) },
+    },
+    accept: id => void accept($, id, 'panel').then(t => $.ui.toast(t)),
+    reject: id => void reject($, id, '', 'panel').then(t => $.ui.toast(t)),
+    edit: id => void $.prompt.fill({ text: tr('register.m055', { p0: id }), mode: 'replace' }).catch(() => undefined),
+    toggleReview: () => setUi(u => ({ ...u, showReview: !u.showReview })),
+    approveReview: id => void approveReview($, id).then(t => $.ui.toast(t)),
+    rejectReview: id => void undoReview($, id).then(t => $.ui.toast(t)),
+    refresh: () => later($),
+    pickNext: () => {
+      const ids = snap.plans.filter(p => p.status === 'active' && (snap.repoPlans.includes(p.id) || snap.sessions.some(s => s.isSelf && s.claims.some(c => c.plan === p.id)))).map(p => p.id)
+      if (ids.length < 2) { $.ui.toast(tr('register.m057')); return }
+      const cur = snap.focusPlan ? ids.indexOf(snap.focusPlan) : -1
+      const nextId = ids[(cur + 1) % ids.length] ?? null
+      setUi(u => ({ ...u, pick: nextId }))
+    },
+    togglePhase: (id, wasOpen) => setUi(u => ({ ...u, expanded: [...u.expanded.filter(k => k !== `open-${id}` && k !== `shut-${id}`), wasOpen ? `shut-${id}` : `open-${id}`] })),
+    toggleExpand: key => setUi(u => ({ ...u, expanded: u.expanded.includes(key) ? u.expanded.filter(k => k !== key) : [...u.expanded, key] })),
+    toggleRelated: () => setUi(u => ({ ...u, showRelated: !u.showRelated })),
+    toggleEnded: () => setUi(u => ({ ...u, showEnded: !u.showEnded })),
+    dismissAway: () => {
+      void (async () => {
+        const s = await ensureSelf($)
+        if (!s?.away) return
+        s.away.dismissedAt = await now($)
+        await saveSelf($, true)
+        await refresh($)
+      })().catch(() => undefined)
+    },
   })
 }

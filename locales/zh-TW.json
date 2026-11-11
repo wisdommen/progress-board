@@ -577,5 +577,7 @@
   "cost.compactHelp": "確認後由目標工作階段的模型壓縮一次上下文；token 隨上下文變化，計入你的用量。",
   "cost.dispatchHelp": "指派會啟動編排工作階段模型的一輪或新 Agent；token 隨任務和上下文變化，計入你的用量。",
   "cost.messageHelp": "傳送訊息可能讓接收工作階段的模型執行一輪；token 隨上下文和回覆變化，計入你的用量。",
-  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}"
+  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
+  "pane.inactive": "progress-board 在本會話未啟用（無頭會話或初始化失敗）。",
+  "pane.failed": "progress-board 無法繪製此面板："
 }
