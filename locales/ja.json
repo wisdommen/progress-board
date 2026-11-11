@@ -577,5 +577,7 @@
   "cost.compactHelp": "確認後に対象セッションのモデルがコンテキストを 1 回要約します。トークン消費は利用量に計上されます。",
   "cost.dispatchHelp": "統括セッションのモデルのターンまたは Agent を起動します。タスクとコンテキストに応じて利用量に計上されます。",
   "cost.messageHelp": "送信先モデルのターンを開始する場合があります。コンテキストと返信に応じて利用量に計上されます。",
-  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}"
+  "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
+  "pane.inactive": "progress-board はこのセッションでは無効です（ヘッドレス、または初期化に失敗）。",
+  "pane.failed": "progress-board はこのパネルを描画できませんでした："
 }
