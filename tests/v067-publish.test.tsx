@@ -73,3 +73,23 @@ test('V067 a refresh that cannot publish shows why on the pane', async ($, on) =
   expect(text).toContain('over the limit')
   await ui.unmount()
 })
+
+test('V067 the activity list counts toward the budget and keeps its newest rows', async () => {
+  const live = Array.from({ length: 3 }, (_, i) => session(`s${i}`, { isSelf: i === 0 }))
+  const activity = Array.from({ length: 13_500 }, (_, i) => ({ id: `a${i}`, at: NOW - i, by: 'x', kind: 'event', verb: 'updated', text: filler(240) }))
+  const big = { ...snapOf(live), activity } as unknown as Snapshot
+  expect(JSON.stringify(big).length).toBeGreaterThan(4_194_304)
+  const out = publishable(big)! as Snapshot & { activity: { id: string }[] }
+  expect(JSON.stringify(out).length).toBeLessThanOrEqual(PUBLISH_BUDGET)
+  expect(out.activity[0]!.id).toBe('a0')
+  expect(out.activity.length).toBeGreaterThanOrEqual(40)
+})
+
+test('V067 trimming background history never cuts a running task', async () => {
+  const bg = [{ id: 'running', kind: 'agent', name: 'long', startedAt: NOW - 1000 },
+    ...Array.from({ length: 10_000 }, (_, i) => ({ id: `b${i}`, kind: 'bash', name: filler(240), startedAt: NOW - 1000, endedAt: NOW }))]
+  const out = publishable(snapOf([session('self', { isSelf: true, bg })]))!
+  const kept = out.sessions[0]!.bg
+  expect(kept.filter(b => b.endedAt === undefined).map(b => b.id)).toEqual(['running'])
+  expect(JSON.stringify(out).length).toBeLessThanOrEqual(PUBLISH_BUDGET)
+})
