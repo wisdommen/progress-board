@@ -579,5 +579,7 @@
   "cost.messageHelp": "Сообщение может запустить ход модели получателя; токены контекста и ответа учитываются в расходе.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board неактивен в этом сеансе (без интерфейса или ошибка инициализации).",
-  "pane.failed": "progress-board не удалось отрисовать эту панель:"
+  "pane.failed": "progress-board не удалось отрисовать эту панель:",
+  "pane.refreshing": "Обновление: {step} ({seconds} с)",
+  "pane.refreshFailed": "Обновление не удалось на шаге {step}: {reason}"
 }

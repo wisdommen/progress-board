@@ -579,5 +579,7 @@
   "cost.messageHelp": "Sending a message can start one turn in the receiving session’s model; tokens depend on its context and reply and count against your usage.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board is inactive in this session (headless or initialization failed).",
-  "pane.failed": "progress-board could not draw this panel:"
+  "pane.failed": "progress-board could not draw this panel:",
+  "pane.refreshing": "Refreshing: {step} ({seconds}s)",
+  "pane.refreshFailed": "Refresh failed at {step}: {reason}"
 }

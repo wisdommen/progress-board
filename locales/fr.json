@@ -579,5 +579,7 @@
   "cost.messageHelp": "Un message peut lancer un tour du modèle destinataire ; contexte et réponse comptent dans votre utilisation.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board est inactif dans cette session (sans interface ou échec de l'initialisation).",
-  "pane.failed": "progress-board n'a pas pu afficher ce panneau :"
+  "pane.failed": "progress-board n'a pas pu afficher ce panneau :",
+  "pane.refreshing": "Actualisation : {step} ({seconds} s)",
+  "pane.refreshFailed": "Échec de l'actualisation à {step} : {reason}"
 }

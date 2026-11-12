@@ -579,5 +579,7 @@
   "cost.messageHelp": "Un mensaje puede iniciar un turno del modelo receptor; contexto y respuesta cuentan para tu consumo.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board está inactivo en esta sesión (sin interfaz o fallo de inicialización).",
-  "pane.failed": "progress-board no pudo dibujar este panel:"
+  "pane.failed": "progress-board no pudo dibujar este panel:",
+  "pane.refreshing": "Actualizando: {step} ({seconds} s)",
+  "pane.refreshFailed": "La actualización falló en {step}: {reason}"
 }

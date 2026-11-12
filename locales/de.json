@@ -579,5 +579,7 @@
   "cost.messageHelp": "Eine Nachricht kann einen Turn des Empfängermodells starten; Kontext und Antwort zählen zum Verbrauch.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board ist in dieser Sitzung inaktiv (headless oder Initialisierung fehlgeschlagen).",
-  "pane.failed": "progress-board konnte dieses Panel nicht zeichnen:"
+  "pane.failed": "progress-board konnte dieses Panel nicht zeichnen:",
+  "pane.refreshing": "Aktualisierung: {step} ({seconds} s)",
+  "pane.refreshFailed": "Aktualisierung bei {step} fehlgeschlagen: {reason}"
 }
