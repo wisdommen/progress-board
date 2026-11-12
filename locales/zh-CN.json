@@ -579,5 +579,7 @@
   "cost.messageHelp": "发送消息可能让接收会话的模型运行一轮；token 随上下文和回复变化，计入你的用量。",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board 在本会话未启用（无头会话或初始化失败）。",
-  "pane.failed": "progress-board 无法绘制此面板："
+  "pane.failed": "progress-board 无法绘制此面板：",
+  "pane.refreshing": "正在刷新：{step}（{seconds} 秒）",
+  "pane.refreshFailed": "刷新在 {step} 失败：{reason}"
 }

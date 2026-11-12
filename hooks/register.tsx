@@ -21,6 +21,7 @@ import type { EngineInterface, Register, RenderInput } from 'claude-code'
 import type { Approval, BgTask, Claim, PanelUi, Plan, SessionRec, SessionView, Snapshot } from '../types'
 import { activePlanIds, exportPlanOf, inheritFrom, isReviewer, resolveAttributions, taskPlanOf } from './attrib'
 import { buildBanner, focusPlanOf } from './banner'
+import { publishable } from './publish'
 import { WORKER_DUTY, bashSignal, recordEvent, takeProgressReminder } from './freshness'
 import type { ProgressEvent } from '../types'
 import { attachCreatedPr, CHECK_MS, pollFacts } from './facts'
@@ -53,6 +54,9 @@ const uiState = atom({ plugin: 'progress-board', key: 'ui' } as const,
 const tick = atom({ plugin: 'progress-board', key: 'tick' } as const, 0)
 const localeVersion = atom({ plugin: 'progress-board', key: 'localeVersion' } as const, 0)
 const headless = atom({ plugin: 'progress-board', key: 'isHeadless' } as const, false)
+/** Why no snapshot exists yet: the refresh step running and since when, or the last refresh error. */
+const refreshStatus = atom({ plugin: 'progress-board', key: 'refreshStatus' } as const, null as RefreshStatus | null)
+type RefreshStatus = { step: string; since: number; error?: string }
 
 let glyph = '■'
 // Module state. A reload starts it over; the first hook that runs afterwards (session.start, or any other
@@ -81,6 +85,8 @@ async function confirmed($: EngineInterface, key: string): Promise<boolean> {
 }
 let lastSnapKey = ''
 let lastSnap: Snapshot | null = null
+/** Whether a snapshot has reached state; until then the pane shows the refresh step or its error. */
+let isPublished = false
 let lastCleanup = 0
 let lastExport = ''
 let refreshP: Promise<void> | null = null
@@ -321,7 +327,7 @@ async function init($: EngineInterface, start: { cwd: string; isInteractive: boo
   await update($, headless, () => false).catch(() => undefined)
   i18n ??= createI18n($, { backgroundTranslation: true, onChange: async () => {
     lastSnapKey = ''; await update($, localeVersion, n => n + 1);
-    if (lastSnap) await update($, snapshot, () => lastSnap)
+    if (lastSnap) await update($, snapshot, () => publishable(lastSnap))
   } })
   await i18n.init()
   await registerAll($)
@@ -483,6 +489,10 @@ async function cleanup(t: number): Promise<void> {
 }
 
 /** One refresh at a time; a request during one runs once more after it, so a caller always sees its own changes. */
+async function setRefreshStatus($: EngineInterface, status: RefreshStatus | null): Promise<void> {
+  await update($, refreshStatus, () => status).catch(() => undefined)
+}
+
 function refresh($: EngineInterface): Promise<void> {
   if (isOff) return Promise.resolve()
   if (refreshP) {
@@ -495,6 +505,13 @@ function refresh($: EngineInterface): Promise<void> {
         refreshAgain = false
         await refreshOnce($)
       } while (refreshAgain)
+    } catch (error) {
+      // A failed refresh is never silent: the pane shows it while no snapshot exists, and the debug log keeps it.
+      const reason = error instanceof Error ? error.message : String(error)
+      try { await $.ui.log(`progress-board: refresh failed: ${error instanceof Error && error.stack ? error.stack : reason}`, { to: 'debug' }) } catch { /* Diagnostics never mask the error. */ }
+      const status = await read($, refreshStatus).catch(() => null)
+      await setRefreshStatus($, { step: status?.step ?? 'refresh', since: status?.since ?? await $.clock.now(), error: reason })
+      throw error
     } finally {
       refreshP = null
     }
@@ -504,11 +521,18 @@ function refresh($: EngineInterface): Promise<void> {
 
 async function refreshOnce($: EngineInterface): Promise<void> {
   {
+    // Until a first snapshot exists the pane shows which step is running, so a step that hangs or throws is visible.
+    const step = async (name: string) => { if (!isPublished) await setRefreshStatus($, { step: name, since: await $.clock.now() }) }
+    await step('translations')
     await i18n?.refresh()
+    await step('settings')
     await syncSettings($)
+    await step('session')
     await ensureSelf($)
     await saveSelf($)
+    await step('controls')
     if (self && io && paths) await collectControlResults($, { self, io, paths, turnId: () => runningTurn, save: () => saveSelf($, true) })
+    await step('build')
     const built = await build($)
     const snap = built?.snap ?? null
     lastSnap = snap
@@ -518,8 +542,10 @@ async function refreshOnce($: EngineInterface): Promise<void> {
     // Unchanged content leaves the state alone, but the minute moves it: durations and "ago" labels advance.
     const key = publishKey(snap)
     if (key !== lastSnapKey) {
+      await step('publish')
+      await update($, snapshot, () => publishable(snap))
       lastSnapKey = key
-      await update($, snapshot, () => snap)
+      if (snap && !isPublished) { isPublished = true; await setRefreshStatus($, null) }
     }
     // Plan lifecycle changes (a claimed plan finished, a parent's plan resolved) change what is exported.
     await exportEnv($)
@@ -1387,9 +1413,9 @@ export const register: Register = (on, options) => {
 }
 
 /** A headless start never loads the catalogs, so `tr` would answer the bare key: English stands in. */
-function paneText(key: 'pane.inactive' | 'pane.failed', english: string): string {
-  const text = tr(key)
-  return text === key ? english : text
+function paneText(key: 'pane.inactive' | 'pane.failed' | 'pane.refreshing' | 'pane.refreshFailed', english: string, vars: Record<string, string | number> = {}): string {
+  const text = tr(key, vars)
+  return text === key ? english.replace(/\{(\w+)\}/g, (m, k: string) => k in vars ? String(vars[k]) : m) : text
 }
 
 /** Draws the pane for a session that is on; `ui.render` catches what it throws and shows it. */
@@ -1399,7 +1425,13 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const Input = 'Input' in elements ? elements.Input : undefined
   await read($, localeVersion)
   const snap = await read($, snapshot)
-  if (!snap) return <Box><Text dimColor>{tr('register.m054')}</Text></Box>
+  if (!snap) {
+    const status = await read($, refreshStatus)
+    const detail = status?.error ? paneText('pane.refreshFailed', 'Refresh failed at {step}: {reason}', { step: status.step, reason: status.error })
+      : status ? paneText('pane.refreshing', 'Refreshing: {step} ({seconds}s)', { step: status.step, seconds: Math.max(0, Math.round((await $.clock.now() - status.since) / 1000)) })
+      : ''
+    return <Box flexDirection="column"><Text dimColor>{tr('register.m054')}</Text>{detail ? <Text color={status?.error ? 'error' : undefined} dimColor={!status?.error} wrap="wrap">{detail}</Text> : ''}</Box>
+  }
   const storedUi = await read($, uiState)
   const languageChoice = await $.store.get('language').catch(() => undefined)
   const ui: PanelUi = { ...storedUi, settingLanguage: typeof languageChoice === 'string' ? languageChoice : null }

@@ -362,6 +362,7 @@ declare module 'claude-code' {
       tick: number
       localeVersion: number
       isHeadless: boolean
+      refreshStatus: { step: string; since: number; error?: string } | null
     }
   }
 }

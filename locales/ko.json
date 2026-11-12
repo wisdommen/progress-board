@@ -579,5 +579,7 @@
   "cost.messageHelp": "메시지는 수신 세션 모델의 턴을 시작할 수 있습니다. 컨텍스트와 답변에 따른 토큰이 사용량에 포함됩니다.",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board가 이 세션에서 비활성 상태입니다 (헤드리스이거나 초기화 실패).",
-  "pane.failed": "progress-board가 이 패널을 그리지 못했습니다:"
+  "pane.failed": "progress-board가 이 패널을 그리지 못했습니다:",
+  "pane.refreshing": "새로 고침 중: {step} ({seconds}초)",
+  "pane.refreshFailed": "{step} 단계에서 새로 고침 실패: {reason}"
 }

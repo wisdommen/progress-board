@@ -579,5 +579,7 @@
   "cost.messageHelp": "送信先モデルのターンを開始する場合があります。コンテキストと返信に応じて利用量に計上されます。",
   "control.intentRequest": "#{id} · progress_control intent_id={id} {request}",
   "pane.inactive": "progress-board はこのセッションでは無効です（ヘッドレス、または初期化に失敗）。",
-  "pane.failed": "progress-board はこのパネルを描画できませんでした："
+  "pane.failed": "progress-board はこのパネルを描画できませんでした：",
+  "pane.refreshing": "更新中：{step}（{seconds} 秒）",
+  "pane.refreshFailed": "{step} で更新に失敗しました：{reason}"
 }
